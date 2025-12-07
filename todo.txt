@@ -2,4 +2,12 @@ CLIEngine:
 Check for overlapping definitions and conflicting var types.
 
 Algebra:
-Sorting and equality check.
+Make multiplication print out more nicely for letters and constants. Potentially flag options.
+Make expand() consistent for results considering expanding order.
+Use bionomial coefficients or similar combinatorics to optimize power of sum distribution.
+Simplification.
+Implement the "doit" for existing functions, namely trigs.
+Functions: factorial, ceil, floor, sgn, mod, exp (construction only).
+Binary search for piecewise functions.
+Piecewise functions.
+Equality and inequality potentially.
