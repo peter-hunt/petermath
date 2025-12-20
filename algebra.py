@@ -103,7 +103,7 @@ class Expr:
 
     def apply(self, func: FunctionType, *args) -> any:
         """
-        Recursively apply some functionality to the expression object.
+        Recursively apply some functionality to the expression instance.
         The function usually refers to some internally implemented
         method different for each subclass.
         Used for evaluation, simplifcation, and so on.
@@ -173,7 +173,45 @@ class Expr:
     def _evalf(self, value_map: dict["Var", Number] | None = None, /) -> Union["Expr", Number]:
         return self
 
-    def diff(self, var: "Var", /) -> Union["Expr", Number]:
+    def diff(self, var: "Var", /, order: int = 1,
+             *, evaluate: bool = True) -> Union["Expr", Number]:
+        """
+        Public differentiation method for either evaluating the derivative (default)
+        or constructing a Derivative instance with the given variable and order.
+
+        :param self: The expression instance.
+        :param var: The variable to take the derivative with.
+        :type var: "Var"
+        :param order: The order of the derivative.
+        :type order: int
+        :param evaluate: Whether to evaluate the derivative instead of constructing
+                         the Derivative class.
+        :type evaluate: bool
+        :return: Either the evaluated derivative or the Derivative class
+                 of the given variable and order.
+        :rtype: Expr | Number
+        """
+        if evaluate:
+            result = self
+            for _ in range(order):
+                result = _diff(result, var)
+                if result == 0:
+                    break
+            return result
+        else:
+            return Derivative(self, var, order)
+
+    def _diff(self, var: "Var", /) -> Union["Expr", Number]:
+        """
+        Internal differentiation method for the classes to define derivative
+        rules with. Should always be order 1 and evaluated.
+
+        :param self: The expression instance.
+        :param var: The variable to take the derivative with.
+        :type var: "Var"
+        :return: The evaluated derivative.
+        :rtype: Expr | Number
+        """
         raise NotImplementedError
 
     def __repr__(self):
@@ -346,8 +384,8 @@ class Var(Expr):
     def _evalf(self, value_map: dict["Var", Number] | None = None, /) -> ExprLike:
         return (value_map or {}).get(self, self)
 
-    def diff(self, var: "Var", /) -> ExprLike:
-        return 1 if var.name == self.name else 0
+    def _diff(self, var: "Var", /) -> ExprLike:
+        return 1 if var == self else 0
 
 
 ExprMap = dict[Var, ExprLike]
@@ -376,7 +414,7 @@ class Constant(Expr):
     def _evalf(self, value_map: ValueMap, /) -> ExprLike:
         return self.value
 
-    def diff(self, var: Var, /) -> ExprLike:
+    def _diff(self, var: Var, /) -> ExprLike:
         return 0
 
 
@@ -443,8 +481,8 @@ class Add(Expr):
                              for term in self.terms), *args,
         )
 
-    def diff(self, var: Var, /) -> ExprLike:
-        return sum(diff(term, var) for term in self.terms)
+    def _diff(self, var: Var, /) -> ExprLike:
+        return sum(_diff(term, var) for term in self.terms)
 
 
 def format_factor(term: ExprLike, /) -> tuple[bool, str]:
@@ -530,7 +568,7 @@ class Mul(Expr):
               else [factor] for factor in self.factors),
         ))
 
-    def diff(self, var: Var, /) -> ExprLike:
+    def _diff(self, var: Var, /) -> ExprLike:
         return self.coef * sum(
             prod(self.factors[:i]) * diff(factor, var)
             * prod(self.factors[i+1:])
@@ -590,13 +628,13 @@ class Pow(Expr):
             exp_objs = [self.exp]
         return prod(base ** exp for base, exp in iterprod(base_objs, exp_objs))
 
-    def diff(self, var: Var, /) -> ExprLike:
+    def _diff(self, var: Var, /) -> ExprLike:
         if self.base == e:
-            return self.base ** self.exp * self.exp.diff(var)
+            return self.base ** self.exp * self.exp._diff(var)
         elif is_constant(self.exp, var):
-            return self.exp * self.base ** (self.exp - 1) * self.base.diff(var)
+            return self.exp * self.base ** (self.exp - 1) * self.base._diff(var)
         else:
-            return (e ** (Ln(self.base) * self.exp)) * (Ln(self.base) * self.exp).diff(var)
+            return (e ** (Ln(self.base) * self.exp)) * (Ln(self.base) * self.exp)._diff(var)
 
 
 @inherit_docstrings
@@ -626,15 +664,15 @@ class UnaryFunction(Function):
             type(self)(apply(self.arg, func, *args)), *args,
         )
 
-    def diff(self, var: Var, /) -> ExprLike:
-        return self._diff(self.arg) * self.arg.diff(var)
+    def _diff(self, var: Var, /) -> ExprLike:
+        return self._basediff(self.arg) * self.arg._diff(var)
 
-    def _diff(self, expr: ExprLike, /) -> ExprLike:
+    def _basediff(self, expr: ExprLike, /) -> ExprLike:
         """
-        Base derivative for an unary function. Used by `diff()`
+        Base derivative for an unary function. Used by `_diff()`
         method for chain rule.
 
-        :param self: The unary function object.
+        :param self: The unary function instance.
         :param expr: The expression for the derivative function/expression.
                      Usually `self.arg`.
         :type expr: ExprLike
@@ -680,7 +718,7 @@ class Abs(UnaryFunction):
         arg_value = evalf(self.arg, value_map)
         return abs(arg_value) if isinstance(arg_value, Number) else Abs(arg_value)
 
-    def _diff(self, expr: ExprLike, /) -> ExprLike:
+    def _basediff(self, expr: ExprLike, /) -> ExprLike:
         # TODO: implement piecewise and this
         # return Piecewise(expr)
         raise NotImplementedError
@@ -691,15 +729,15 @@ class Sin(UnaryFunction):
     name = "Sin"
     func_key = FUNC_SIN
 
-    def _doit(self) -> ExprLike:
-        arg = doit(self.arg)
-        # TODO: simplify
+    # def _doit(self) -> ExprLike:
+    #     arg = doit(self.arg)
+    #     # TODO: simplify
 
     def _evalf(self, value_map: ValueMap, /) -> ExprLike:
         arg_value = evalf(self.arg, value_map)
         return sin(arg_value) if isinstance(arg_value, Number) else Sin(arg_value)
 
-    def _diff(self, expr: ExprLike, /) -> ExprLike:
+    def _basediff(self, expr: ExprLike, /) -> ExprLike:
         return Cos(expr)
 
 
@@ -712,7 +750,7 @@ class Cos(UnaryFunction):
         arg_value = evalf(self.arg, value_map)
         return cos(arg_value) if isinstance(arg_value, Number) else Cos(arg_value)
 
-    def _diff(self, expr: ExprLike, /) -> ExprLike:
+    def _basediff(self, expr: ExprLike, /) -> ExprLike:
         return -Sin(expr)
 
 
@@ -728,7 +766,7 @@ class Tan(UnaryFunction):
         arg_value = evalf(self.arg, value_map)
         return tan(arg_value) if isinstance(arg_value, Number) else Tan(arg_value)
 
-    def _diff(self, expr: ExprLike, /) -> ExprLike:
+    def _basediff(self, expr: ExprLike, /) -> ExprLike:
         return Sec(expr) ** 2
 
 
@@ -744,7 +782,7 @@ class Sec(UnaryFunction):
         arg_value = evalf(self.arg, value_map)
         return (1 / cos(arg_value)) if isinstance(arg_value, Number) else Sec(arg_value)
 
-    def _diff(self, expr: ExprLike, /) -> ExprLike:
+    def _basediff(self, expr: ExprLike, /) -> ExprLike:
         return Sec(expr) * Tan(expr)
 
 
@@ -760,7 +798,7 @@ class Csc(UnaryFunction):
         arg_value = evalf(self.arg, value_map)
         return (1 / sin(arg_value)) if isinstance(arg_value, Number) else Csc(arg_value)
 
-    def _diff(self, expr: ExprLike, /) -> ExprLike:
+    def _basediff(self, expr: ExprLike, /) -> ExprLike:
         return -Csc(expr) * Cot(expr)
 
 
@@ -776,7 +814,7 @@ class Cot(UnaryFunction):
         arg_value = evalf(self.arg, value_map)
         return (1 / tan(arg_value)) if isinstance(arg_value, Number) else Cot(arg_value)
 
-    def _diff(self, expr: ExprLike, /) -> ExprLike:
+    def _basediff(self, expr: ExprLike, /) -> ExprLike:
         return -Csc(expr) ** 2
 
 
@@ -789,7 +827,7 @@ class Arcsin(UnaryFunction):
         arg_value = evalf(self.arg, value_map)
         return asin(arg_value) if isinstance(arg_value, Number) else Arcsin(arg_value)
 
-    def _diff(self, expr: ExprLike, /) -> ExprLike:
+    def _basediff(self, expr: ExprLike, /) -> ExprLike:
         return 1 / (1 - expr ** 2).sqrt()
 
 
@@ -802,7 +840,7 @@ class Arccos(UnaryFunction):
         arg_value = evalf(self.arg, value_map)
         return acos(arg_value) if isinstance(arg_value, Number) else Arccos(arg_value)
 
-    def _diff(self, expr: ExprLike, /) -> ExprLike:
+    def _basediff(self, expr: ExprLike, /) -> ExprLike:
         return -1 / (1 - expr ** 2).sqrt()
 
 
@@ -815,7 +853,7 @@ class Arctan(UnaryFunction):
         arg_value = evalf(self.arg, value_map)
         return atan(arg_value) if isinstance(arg_value, Number) else Arctan(arg_value)
 
-    def _diff(self, expr: ExprLike, /) -> ExprLike:
+    def _basediff(self, expr: ExprLike, /) -> ExprLike:
         return 1 / (1 + expr ** 2)
 
 
@@ -828,7 +866,7 @@ class Arcsec(UnaryFunction):
         arg_value = evalf(self.arg, value_map)
         return acos(1 / arg_value) if isinstance(arg_value, Number) else Arcsec(arg_value)
 
-    def _diff(self, expr: ExprLike, /) -> ExprLike:
+    def _basediff(self, expr: ExprLike, /) -> ExprLike:
         return 1 / Abs(expr) / (expr ** 2 - 1).sqrt()
 
 
@@ -841,7 +879,7 @@ class Arccsc(UnaryFunction):
         arg_value = evalf(self.arg, value_map)
         return asin(1 / arg_value) if isinstance(arg_value, Number) else Arccsc(arg_value)
 
-    def _diff(self, expr: ExprLike, /) -> ExprLike:
+    def _basediff(self, expr: ExprLike, /) -> ExprLike:
         return -1 / Abs(expr) / (expr ** 2 - 1).sqrt()
 
 
@@ -854,7 +892,7 @@ class Arccot(UnaryFunction):
         arg_value = evalf(self.arg, value_map)
         return atan(1 / arg_value) if isinstance(arg_value, Number) else Arccot(arg_value)
 
-    def _diff(self, expr: ExprLike, /) -> ExprLike:
+    def _basediff(self, expr: ExprLike, /) -> ExprLike:
         return -1 / (1 + expr ** 2)
 
 
@@ -878,7 +916,7 @@ class Ln(UnaryFunction):
         arg_value = evalf(self.arg, value_map)
         return log(arg_value) if isinstance(arg_value, Number) else Ln(arg_value)
 
-    def _diff(self, expr: ExprLike, /) -> ExprLike:
+    def _basediff(self, expr: ExprLike, /) -> ExprLike:
         return 1 / expr
 
 
@@ -907,8 +945,8 @@ class Log(BinaryFunction):
         else:
             return Log(arg1_value, arg2_value)
 
-    def diff(self, var: Var, /) -> ExprLike:
-        return (Ln(self.arg1) / Ln(self.arg2)).diff()
+    def _basediff(self, var: Var, /) -> ExprLike:
+        return (Ln(self.arg1) / Ln(self.arg2))._diff()
 
 
 @inherit_docstrings
@@ -981,15 +1019,23 @@ class Derivative(Expr):
         )
 
     def _doit(self):
-        result = self.expr
-        for _ in range(self.order):
-            result = diff(result, self.var)
-            if result == 0:
-                break
-        return result
+        return diff(self.expr, self.var, self.order)
 
-    def diff(self, var: Var, /) -> ExprLike:
-        return doit(self).diff()
+    def diff(self, var: Var, order: int = 1, /, evaluate: bool = True) -> ExprLike:
+        if evaluate:
+            result = self.doit()
+            for _ in range(order):
+                result = _diff(result, var)
+                if result == 0:
+                    break
+            return result
+        elif var == self.var:
+            return Derivative(self.expr, self.var, self.order + 1)
+        else:
+            return Derivative(self, var, self.order + 1)
+
+    def _diff(self, var: Var, /) -> ExprLike:
+        return _diff(self.doit(), var)
 
 
 @inherit_docstrings
@@ -1032,12 +1078,12 @@ class Integral(Expr):
                      apply(self.b, func, *args)), *args,
         )
 
-    def diff(self, var: Var, /) -> ExprLike:
-        if self.var.name == var.name and self.a is None and self.b is None:
+    def _diff(self, var: Var, /) -> ExprLike:
+        if self.var == var and self.a is None and self.b is None:
             return self.expr
         else:
             result = doit(self)
-            return result if isinstance(result, Integral) else result.diff(var)
+            return result if isinstance(result, Integral) else result._diff(var)
 
 
 @typechecked
@@ -1072,7 +1118,7 @@ def is_constant(expr: ExprLike, var: Var | None = None, /) -> bool:
     if isinstance(expr, Number | Constant):
         return True
     elif isinstance(expr, Var):
-        return var is not None and expr.name != var.name
+        return var is not None and expr != var
     elif isinstance(expr, Add):
         return all(is_constant(term) for term in expr.terms)
     elif isinstance(expr, Mul):
@@ -1090,7 +1136,7 @@ def is_constant(expr: ExprLike, var: Var | None = None, /) -> bool:
 @typechecked
 def apply(expr: ExprLike, func: FunctionType, *args) -> ExprLike:
     """
-    Recursively apply some function with ExprLike object.
+    Recursively apply some function with ExprLike instance.
     Any children node inside the expression is applied with the function
     before creating a new class, as passed arbitrarily or defined
     otherwise in the corresponding class method to recursively
@@ -1115,7 +1161,7 @@ def apply(expr: ExprLike, func: FunctionType, *args) -> ExprLike:
 @typechecked
 def doit(expr: ExprLike, /) -> ExprLike:
     """
-    Recursively apply Expr.doit() method with ExprLike object.
+    Recursively apply Expr.doit() method with ExprLike instance.
     This function executes symbolic operations, like derivatives and
     integrals, and evaluates closed-form expressions, like Sin(π).
 
@@ -1124,13 +1170,13 @@ def doit(expr: ExprLike, /) -> ExprLike:
     :rtype: ExprLike (Expr | Number)
     :raises TypeError: If any argument doesn't match expected type.
     """
-    return apply(expr, lambda x: x if isinstance(x, Number) else x._doit())
+    return apply(expr, lambda x: x._doit() if isinstance(x, Expr) else x)
 
 
 @typechecked
 def subs(expr: ExprLike, expr_map: ExprMap | None = None, /) -> ExprLike:
     """
-    Recursively apply Expr.subs(mapping) method with ExprLike object.
+    Recursively apply Expr.subs(mapping) method with ExprLike instance.
     This function replaces symbols exactly as written, doing no
     simplification, differentiation, integration, algebra, or
     arithmetic other than the basic structural flattening.
@@ -1154,7 +1200,7 @@ def subs(expr: ExprLike, expr_map: ExprMap | None = None, /) -> ExprLike:
 @typechecked
 def evalf(expr: ExprLike, value_map: ValueMap | None = None, /) -> ExprLike:
     """
-    Recursively apply Expr.evalf(mapping) method with ExprLike object.
+    Recursively apply Expr.evalf(mapping) method with ExprLike instance.
     This function calculates numeral approximation with floating-point
     computation. Small margins of error are to be expected when used on
     trignometry functions in place of doit(). Evaluates constants into values.
@@ -1178,6 +1224,11 @@ def evalf(expr: ExprLike, value_map: ValueMap | None = None, /) -> ExprLike:
         return expr.evalf(value_map)
 
 
+# factor_mul is basically using linear/quadratic/cubic/quartic formulas
+# on one variable for the solutions for zero value and writing the
+# polynomial in factor form.
+# quintic and up are still doable if polynomial is single variable
+# but at some point it's pointless to factor
 @typechecked
 def factor(expr: ExprLike, /) -> ExprLike:
     if isinstance(expr, Number):
@@ -1227,9 +1278,10 @@ def expand(expr: ExprLike, /) -> ExprLike:
 
 
 # TODO: expand to add, mul, pow, trig, log, func
+# AKA factor
 @typechecked
-def combine(expr: ExprLike, /) -> ExprLike:
-    """Combine flattened algebra in multiplication, power, and so on."""
+def reduce(expr: ExprLike, /) -> ExprLike:
+    """Combine/factor flattened algebra in multiplication, power, and so on."""
     if isinstance(expr, Number):
         return expr
     return expr
@@ -1259,13 +1311,7 @@ def apart(expr: ExprLike, /) -> ExprLike:
     return expr
 
 
-@typechecked
-def simplify(expr: ExprLike, /) -> ExprLike:
-    if isinstance(expr, Number):
-        return expr
-    return expr
-
-
+# grouping the expression by variable
 @typechecked
 def collect(expr: ExprLike, var: Var, /) -> ExprLike:
     if isinstance(expr, Number):
@@ -1274,10 +1320,17 @@ def collect(expr: ExprLike, var: Var, /) -> ExprLike:
 
 
 @typechecked
-def diff(expr: ExprLike, var: Var, /) -> ExprLike:
+def simplify(expr: ExprLike, /) -> ExprLike:
+    if isinstance(expr, Number):
+        return expr
+    return expr
+
+
+@typechecked
+def _diff(expr: ExprLike, var: Var, /) -> ExprLike:
     """
-    Calculates the derivative of the expression with
-    respect to the given variable.
+    Calculates the first order derivative of the expression with
+    respect to the given variable with.
 
     :param expr: The expression to take the derivative of.
     :type expr: ExprLike
@@ -1286,26 +1339,39 @@ def diff(expr: ExprLike, var: Var, /) -> ExprLike:
     :return: The derivative of the expression.
     :rtype: ExprLike
     """
-    return expr.diff(var) if isinstance(expr, Expr) else 0
+    return expr._diff(var) if isinstance(expr, Expr) else 0
+
+
+@typechecked
+def diff(expr: ExprLike, var: Var, /, order: int = 1, *, evaluate=True) -> ExprLike:
+    """
+    Either evaluate the derivative (default) or construct a Derivative instance
+    with the given variable and order. Calls on Expr.diff() for the implementation.
+
+    :param self: The expression instance.
+    :param var: The variable to take the derivative with.
+    :type var: "Var"
+    :param order: The order of the derivative.
+    :type order: int
+    :param evaluate: Whether to evaluate the derivative instead of constructing
+                        the Derivative class.
+    :type evaluate: bool
+    :return: Either the evaluated derivative or the Derivative class
+                of the given variable and order.
+    :rtype: Expr | Number
+    """
+    return expr.diff(var, order, evaluate=evaluate) if isinstance(expr, Expr) else 0
 
 
 def main():
     x, y, z = symbols("xyz")
-    expr = (x + 1) * (y + 2) * (z + 3)
+    expr = sum(x ** i for i in range(5))
     print(expr)
-    print(expr.expand_mul())
-    expr = (x * y) ** (z + 3)
-    print(expr)
-    print(expr.expand_pow())
-    expr = Ln(x * y * z)
-    print(expr)
-    print(expr.expand_log())
-    expr = Ln(x ** y)
-    print(expr)
-    print(expr.expand_log())
-    expr = (x * y * 4) ** ((z + 3) * (y + z + 4))
-    print(expr)
-    print(expr.expand())
+    print(expr.evalf())
+    expr2 = x + y + z
+    print(expr2)
+    print(expr2.evalf())
+    print(expr2.evalf({x: 1}))
 
 
 if __name__ == "__main__":

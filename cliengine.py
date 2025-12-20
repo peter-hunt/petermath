@@ -1,11 +1,11 @@
-import re
+from re import compile as re_compile, VERBOSE
 from typing import Callable
 
 
 class ArgType:
     def __init__(self, name: str, pattern: str, converter: Callable[[str], any]):
         self.name = name
-        self.pattern = re.compile(pattern)
+        self.pattern = re_compile(pattern)
         self.converter = converter
 
     def is_valid(self, value: str) -> bool:
@@ -15,7 +15,7 @@ class ArgType:
         return self.converter(value)
 
 
-def bool_convert(v: str):
+def bool_convert(v: str, /) -> bool:
     v = v.lower()
     if v in ("1", "true", "yes", "y", "t"):
         return True
@@ -32,7 +32,7 @@ ARG_TYPES: dict[str, ArgType] = {
 }
 
 
-def parse_argtype(name: str, type_name: str | None):
+def parse_argtype(name: str, type_name: str | None, /):
     if type_name is None:
         return ARG_TYPES["str"]
 
@@ -58,7 +58,7 @@ class CommandPattern:
         set speed <speed:float> [<sprint:bool>]
     """
 
-    token_re = re.compile(
+    token_re = re_compile(
         r"""
         <(?P<reqname>[a-zA-Z_]\w*)(:(?P<reqtype>[a-zA-Z_]\w*))?>
         |
@@ -66,7 +66,7 @@ class CommandPattern:
         |
         (?P<lit>[^\s]+)
         """,
-        re.VERBOSE
+        VERBOSE,
     )
 
     def __init__(self, pattern_str: str):
@@ -173,7 +173,7 @@ def tokenize(s: str) -> list[str]:
             escape = False
             continue
 
-        if ch == "\\":
+        if ch == '\\':
             escape = True
             continue
 
@@ -208,7 +208,7 @@ class CLIEngine:
         self.commands: dict[str, Command] = {}
         self._register_builtin_commands()
 
-    def register(self, cmd: Command):
+    def register(self, cmd: Command, /):
         if cmd.name in self.commands:
             raise ValueError(f"Duplicate command name '{cmd.name}'")
         self.commands[cmd.name] = cmd
@@ -229,7 +229,7 @@ class CLIEngine:
             patterns=["exit", "quit"]
         ))
 
-    def _cmd_help(self, ctx, command=None):
+    def _cmd_help(self, ctx, command=None, /):
         if command is None:
             out = ["Available commands:"]
             for name in sorted(self.commands):
