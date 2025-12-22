@@ -1,7 +1,8 @@
+from fractions import Fraction
 from itertools import product as iterprod
 from math import e as math_e, pi as math_pi, \
     sqrt, prod, sin, cos, tan, log, asin, acos, atan
-from numbers import Number
+from numbers import Number, Rational
 from struct import pack
 from types import FunctionType
 from typing import Iterable, Union
@@ -43,16 +44,17 @@ def inherit_docstrings(cls: type) -> type:
 CanonicalKey = tuple[int | float | tuple, ...]
 
 KEY_INT = 0
-KEY_FLT = 1
-KEY_CNS = 2
-KEY_VAR = 3
-KEY_ADD = 4
-KEY_MUL = 5
-KEY_POW = 6
-KEY_FNC = 7
-KEY_LIM = 8
-KEY_DER = 9
-KEY_ITG = 10
+KEY_FRC = 1
+KEY_FLT = 2
+KEY_CNS = 3
+KEY_VAR = 4
+KEY_ADD = 5
+KEY_MUL = 6
+KEY_POW = 7
+KEY_FNC = 8
+KEY_LIM = 9
+KEY_DER = 10
+KEY_ITG = 11
 
 FUNC_ABS = 0
 FUNC_SIN = 0
@@ -88,7 +90,7 @@ class Expr:
         :return: The square root of the expression.
         :rtype: Expr | Number
         """
-        return Pow(self, 1 / 2)
+        return Pow(self, Fraction(1, 2))
 
     def cbrt(self) -> Union["Expr", Number]:
         """
@@ -99,7 +101,7 @@ class Expr:
         :return: The cube root of the expression.
         :rtype: Expr | Number
         """
-        return Pow(self, 1 / 3)
+        return Pow(self, Fraction(1, 3))
 
     def apply(self, func: FunctionType, *args) -> any:
         """
@@ -122,6 +124,12 @@ class Expr:
         return self.apply(lambda x: x if isinstance(x, Number) else x._expand_mul())
 
     def _expand_mul(self) -> Union["Expr", Number]:
+        return self
+
+    def expand_dist(self) -> Union["Expr", Number]:
+        return self.apply(lambda x: x if isinstance(x, Number) else x._expand_dist())
+
+    def _expand_dist(self) -> Union["Expr", Number]:
         return self
 
     def expand_pow(self) -> Union["Expr", Number]:
@@ -149,6 +157,7 @@ class Expr:
             expr = expand_trig(expr)
             expr = expand_log(expr)
             expr = expand_pow(expr)
+            expr = expand_dist(expr)
             expr = expand_mul(expr)
             if original == expr:
                 break
@@ -234,6 +243,8 @@ class Expr:
             return self
         elif isinstance(self, Add) and isinstance(other, Add):
             return Add(self.const + other.const, *self.terms, *other.terms)
+        elif isinstance(self, Add) and isinstance(other, Number):
+            return Add(self.const + other, *self.terms)
         elif isinstance(self, Add):
             return Add(self.const, *self.terms, other)
         elif isinstance(other, Add):
@@ -244,6 +255,8 @@ class Expr:
     def __radd__(self, other: Union["Expr", Number]) -> Union["Expr", Number]:
         if other == 0:
             return self
+        elif isinstance(self, Add) and isinstance(other, Number):
+            return Add(self.const + other, *self.terms)
         elif isinstance(self, Add):
             return Add(other, self.const, *self.terms)
         else:
@@ -252,6 +265,8 @@ class Expr:
     def __sub__(self, other: Union["Expr", Number]) -> Union["Expr", Number]:
         if other == 0:
             return self
+        elif isinstance(self, Add) and isinstance(other, Number):
+            return Add(self.const - other, *self.terms)
         elif isinstance(self, Add):
             return Add(Mul(-1, other), self.const, *self.terms)
         else:
@@ -266,6 +281,8 @@ class Expr:
     def __mul__(self, other: Union["Expr", Number]) -> Union["Expr", Number]:
         if other == 1:
             return self
+        elif isinstance(self, Mul) and isinstance(other, Number):
+            return Mul(self.coef * other, *self.factors)
         elif isinstance(self, Mul) and isinstance(other, Mul):
             return Mul(self.coef * other.coef, *self.factors, *other.factors)
         elif isinstance(self, Mul):
@@ -278,6 +295,8 @@ class Expr:
     def __rmul__(self, other: Union["Expr", Number]) -> Union["Expr", Number]:
         if other == 1:
             return self
+        elif isinstance(self, Mul) and isinstance(other, Number):
+            return Mul(self.coef * other, *self.factors)
         elif isinstance(self, Mul):
             return Mul(other, self.coef, *self.factors)
         else:
@@ -286,6 +305,8 @@ class Expr:
     def __truediv__(self, other: Union["Expr", Number]) -> Union["Expr", Number]:
         if other == 1:
             return self
+        elif isinstance(self, Mul) and isinstance(other, Number):
+            return Mul(frdiv(self.coef, other), *self.factors)
         elif isinstance(self, Mul):
             return Mul(self.coef, *self.factors, Pow(other, -1))
         else:
@@ -301,17 +322,17 @@ class Expr:
 
     def __pow__(self, other: Union["Expr", Number]) -> Union["Expr", Number]:
         if other == 0:
-            # TODO: check for 0^0
+            # ! check for 0^0, defined as 1
             return 1
         elif other == 1:
             return self
         elif isinstance(self, Pow):
-            return Pow(self.base, self.exp * other)
+            return Pow(self.base, self.expo * other)
         else:
             return Pow(self, other)
 
     def __rpow__(self, other: Union["Expr", Number]) -> Union["Expr", Number]:
-        # TODO: check for 0^0
+        # ! check for 0^0, defined as 1
         if other == 0 or other == 1:
             return other
         else:
@@ -330,6 +351,22 @@ class Expr:
 ExprLike = Expr | Number
 
 
+@typechecked
+def frdiv(a: ExprLike, b: ExprLike, /) -> ExprLike:
+    if isinstance(a, int) and isinstance(b, int):
+        return Fraction(a, b)
+    else:
+        return a / b
+
+
+@typechecked
+def frpow(a: ExprLike, b: ExprLike, /) -> ExprLike:
+    if isinstance(a, int) and isinstance(b, int) and b < 0:
+        return Fraction(1, a ** -b)
+    else:
+        return a ** b
+
+
 def float_bits(x: float, /) -> int:
     # Convert float -> 8 bytes big-endian → integer
     return int.from_bytes(pack(">d", x), "big")
@@ -339,6 +376,8 @@ def float_bits(x: float, /) -> int:
 def exprhash(expr: ExprLike, /) -> tuple[int | tuple, ...]:
     if isinstance(expr, int):
         return (KEY_INT, expr)
+    elif isinstance(expr, Fraction):
+        return (KEY_INT, float(expr), expr.numerator)
     elif isinstance(expr, float):
         return (KEY_FLT, float_bits(expr))
     elif isinstance(expr, Expr):
@@ -487,15 +526,15 @@ class Add(Expr):
 
 def format_factor(term: ExprLike, /) -> tuple[bool, str]:
     if isinstance(term, Pow):
-        if is_constant(term.exp):
-            exp_value = evalf(term.exp)
+        if is_constant(term.expo):
+            exp_value = evalf(term.expo)
             if exp_value == -1:
                 return (False, f"{term.base}")
             elif exp_value < 0:
-                return (False, f"{term.base ** (-term.exp)}")
-        elif isinstance(term.exp, Mul):
-            if term.exp.coef < 0:
-                return (False, f"{term.base ** (-term.exp)}")
+                return (False, f"{term.base ** (-term.expo)}")
+        elif isinstance(term.expo, Mul):
+            if term.expo.coef < 0:
+                return (False, f"{term.base ** (-term.expo)}")
     if isinstance(term, Add):
         return (True, f"({term})")
     else:
@@ -579,62 +618,78 @@ class Mul(Expr):
 @inherit_docstrings
 class Pow(Expr):
     base: ExprLike
-    exp: ExprLike
+    expo: ExprLike
 
     def __init__(self, base: ExprLike, exp: ExprLike, /):
         self.base = base
-        self.exp = exp
+        self.expo = exp
 
     def __repr__(self):
-        return f"Pow({self.base!r}, {self.exp!r})"
+        return f"Pow({self.base!r}, {self.expo!r})"
 
     def __str__(self):
         base_str = f"{self.base}"
         if isinstance(self.base, Add | Mul):
             base_str = f"({base_str})"
-        exp_str = f"{self.exp}"
-        if is_constant(self.exp):
-            exp_value = evalf(self.exp)
+        exp_str = f"{self.expo}"
+        if is_constant(self.expo):
+            exp_value = evalf(self.expo)
             if exp_value == -1:
                 return f"1 / {base_str}"
             elif exp_value < 0:
-                return f"1 / {base_str}^{-self.exp}"
-        elif isinstance(self.exp, Mul):
-            if self.exp.coef < 0:
-                exp_str = f"{-self.exp}"
+                return f"1 / {base_str}^{-self.expo}"
+        elif isinstance(self.expo, Mul):
+            if self.expo.coef < 0:
+                exp_str = f"{-self.expo}"
                 if '*' in exp_str:
                     exp_str = f"({exp_str})"
                 return f"1 / {base_str}^{exp_str}"
-        if isinstance(self.exp, Add | Mul):
+        if isinstance(self.expo, Add | Mul):
             exp_str = f"({exp_str})"
         return f"{base_str}^{exp_str}"
 
     def exprhash(self) -> CanonicalKey:
-        return (KEY_POW, exprhash(self.base), exprhash(self.exp))
+        return (KEY_POW, exprhash(self.base), exprhash(self.expo))
 
     def apply(self, func: FunctionType, *args) -> any:
         return func(
-            apply(self.base, func, *args) ** apply(self.exp, func, *args), *args,
+            frpow(apply(self.base, func, *args),
+                  apply(self.expo, func, *args)), *args,
         )
+
+    def _expand_dist(self) -> Union["Expr", Number]:
+        if not isinstance(self.base, Add):
+            return self
+        elif not isinstance(self.expo, Number):
+            return self
+        elif self.expo % 1 != 0:
+            return self
+        # to maximize floating point safety in cost of efficiency
+        exp = round(self.expo)
+
+        all_terms = [self.base.const] + self.base.terms
+        return sum(prod(group) for group in iterprod(
+            *([all_terms] * exp)
+        ))
 
     def _expand_pow(self) -> Union["Expr", Number]:
         if isinstance(self.base, Mul):
             base_objs = [self.base.coef] + self.base.factors
         else:
             base_objs = [self.base]
-        if isinstance(self.exp, Add):
-            exp_objs = [self.exp.const] + self.exp.terms
+        if isinstance(self.expo, Add):
+            exp_objs = [self.expo.const] + self.expo.terms
         else:
-            exp_objs = [self.exp]
-        return prod(base ** exp for base, exp in iterprod(base_objs, exp_objs))
+            exp_objs = [self.expo]
+        return prod(frpow(base, exp) for base, exp in iterprod(base_objs, exp_objs))
 
     def _diff(self, var: Var, /) -> ExprLike:
         if self.base == e:
-            return self.base ** self.exp * self.exp._diff(var)
-        elif is_constant(self.exp, var):
-            return self.exp * self.base ** (self.exp - 1) * self.base._diff(var)
+            return self.base ** self.expo * self.expo._diff(var)
+        elif is_constant(self.expo, var):
+            return self.expo * frpow(self.base, (self.expo - 1)) * self.base._diff(var)
         else:
-            return (e ** (Ln(self.base) * self.exp)) * (Ln(self.base) * self.exp)._diff(var)
+            return (e ** (Ln(self.base) * self.expo)) * (Ln(self.base) * self.expo)._diff(var)
 
 
 @inherit_docstrings
@@ -908,7 +963,7 @@ class Ln(UnaryFunction):
                 [Ln(factor).expand_log() for factor in self.arg.factors]
             )
         elif isinstance(self.arg, Pow):
-            return self.arg.exp * Ln(self.arg.base)
+            return self.arg.expo * Ln(self.arg.base)
         else:
             return self
 
@@ -933,7 +988,7 @@ class Log(BinaryFunction):
                  for factor in self.arg1.factors]
             )
         elif isinstance(self.arg1, Pow):
-            return self.arg1.exp * Log(self.arg1.base, self.arg2)
+            return self.arg1.expo * Log(self.arg1.base, self.arg2)
         else:
             return self
 
@@ -1038,12 +1093,17 @@ class Derivative(Expr):
         return _diff(self.doit(), var)
 
 
+def integrate(expr: ExprLike, var: Var,
+              a: ExprLike | None = None, b: ExprLike | None = None, /):
+    return Integral(expr, var, a, b).doit()
+
+
 @inherit_docstrings
 class Integral(Expr):
     expr: ExprLike
     var: Var
-    a: ExprLike | None = None
-    b: ExprLike | None = None
+    a: ExprLike | None = None  # lower bound
+    b: ExprLike | None = None  # upper bound
 
     def __init__(self, expr: ExprLike, var: Var,
                  a: ExprLike | None = None, b: ExprLike | None = None, /):
@@ -1074,9 +1134,31 @@ class Integral(Expr):
         return func(
             Integral(apply(self.expr, func, *args),
                      apply(self.var, func, *args),
-                     apply(self.a, func, *args),
-                     apply(self.b, func, *args)), *args,
+                     None if self.a is None else apply(self.a, func, *args),
+                     None if self.b is None else apply(self.b, func, *args)), *args,
         )
+
+    def indef_doit(self) -> ExprLike | None:
+        if is_constant(self.expr, self.var):
+            return self.expr * self.var
+        elif is_mono(self.expr, self.var):  # ! could be buggy
+            coef, expo = split_mono(self.expr, self.var)
+            if expo == -1:
+                return coef * Ln(self.var)
+            else:
+                return coef / (expo + 1) * self.var ** (expo + 1)
+        elif is_poly(expanded := expand(self.expr), self.var):
+            return sum(integrate(mono, self.var)
+                       for mono in split_poly(expanded))
+
+    def _doit(self) -> ExprLike:
+        indef_result = self.indef_doit()
+        if indef_result is None:
+            return self
+        elif self.a is None:
+            return indef_result
+        else:
+            return indef_result.subs({self.var: self.b}) - indef_result.subs({self.var: self.a})
 
     def _diff(self, var: Var, /) -> ExprLike:
         if self.var == var and self.a is None and self.b is None:
@@ -1102,7 +1184,7 @@ def symbols(letters: str, /) -> tuple[Var, ...]:
 @typechecked
 def is_constant(expr: ExprLike, var: Var | None = None, /) -> bool:
     """
-    Checks of the expression is a constant value, aka. a structure
+    Determines if the expression is a constant value, aka. a structure
     with only known functions and numbers and constants. An optional
     variable variable can be passed to check if the variable is included
     in the expression.
@@ -1120,21 +1202,256 @@ def is_constant(expr: ExprLike, var: Var | None = None, /) -> bool:
     elif isinstance(expr, Var):
         return var is not None and expr != var
     elif isinstance(expr, Add):
-        return all(is_constant(term) for term in expr.terms)
+        return all(is_constant(term, var) for term in expr.terms)
     elif isinstance(expr, Mul):
-        return all(is_constant(factor) for factor in expr.factors)
+        return all(is_constant(factor, var) for factor in expr.factors)
     elif isinstance(expr, Pow):
-        return is_constant(expr.base) and is_constant(expr.exp)
+        return is_constant(expr.base, var) and is_constant(expr.expo, var)
     elif isinstance(expr, UnaryFunction):
-        return is_constant(expr.arg)
+        return is_constant(expr.arg, var)
     elif isinstance(expr, BinaryFunction):
-        return is_constant(expr.arg1) and is_constant(expr.arg2)
+        return is_constant(expr.arg1, var) and is_constant(expr.arg2, var)
     elif isinstance(expr, Limit):
-        return is_constant(expr.expr) and is_constant(expr.var) and is_constant(expr.point)
+        return (is_constant(expr.expr, var) and is_constant(expr.var, var)
+                and is_constant(expr.point, var))
     elif isinstance(expr, Derivative):
-        return is_constant(expr.expr) and is_constant(expr.var)
+        return is_constant(expr.expr, var) and is_constant(expr.var, var)
     elif isinstance(expr, Integral):
-        return is_constant(expr.expr) and is_constant(expr.var) and is_constant(expr.a) and is_constant(expr.b)
+        return (is_constant(expr.expr, var) and is_constant(expr.var, var)
+                and is_constant(expr.a, var) and is_constant(expr.b, var))
+    else:
+        return False
+
+
+@typechecked
+def is_rat_constant(expr: ExprLike, var: Var | None = None, /) -> bool:
+    """
+    Determines if the expression is a rational constant value, aka.
+    a structure with only known functions and rational numbers. An optional
+    variable variable can be passed to check if the variable is included
+    in the expression.
+
+    :param expr: The expression to check.
+    :type expr: ExprLike
+    :param var: The optional variable to check relationship with.
+    :type var: Var | None
+    :return: Whether if the expression is rational constant
+             or unrelated to the given variable
+    :rtype: bool
+    """
+    if isinstance(expr, Number):
+        return isinstance(expr, Rational)
+    elif isinstance(expr, Var):
+        return var is not None and expr != var
+    elif isinstance(expr, Add):
+        return all(is_rat_constant(term, var) for term in expr.terms)
+    elif isinstance(expr, Mul):
+        return all(is_rat_constant(factor, var) for factor in expr.factors)
+    elif isinstance(expr, Pow):
+        return is_rat_constant(expr.base, var) and is_rat_constant(expr.expo, var)
+    elif isinstance(expr, UnaryFunction):
+        return is_rat_constant(expr.arg, var)
+    elif isinstance(expr, BinaryFunction):
+        return is_rat_constant(expr.arg1, var) and is_rat_constant(expr.arg2, var)
+    elif isinstance(expr, Limit):
+        return (is_rat_constant(expr.expr, var) and is_rat_constant(expr.var, var)
+                and is_rat_constant(expr.point, var))
+    elif isinstance(expr, Derivative):
+        return is_rat_constant(expr.expr, var) and is_rat_constant(expr.var, var)
+    elif isinstance(expr, Integral):
+        return (is_rat_constant(expr.expr, var) and is_rat_constant(expr.var, var)
+                and is_rat_constant(expr.a, var) and is_rat_constant(expr.b, var))
+    else:
+        return False
+
+
+@typechecked
+def split_poly(expr: ExprLike, /) -> list[ExprLike]:
+    """
+    Return a list of addition operants or the expression itself if not
+    an add node. Useful for processing polynomials into monomials when
+    checked to be polynomials.
+
+    :param expr: The expression to split.
+    :type expr: ExprLike
+    :return: The list of addition operants or
+             a list of the expressiion itself.
+    :rtype: list[ExprLike]
+    """
+    return [expr.const] + expr.terms if isinstance(expr, Add) else [expr]
+
+
+@typechecked
+def is_mono(expr: ExprLike, var: Var | None = None, /) -> bool:
+    """
+    Determines if the expression is a monomial only consisting of
+    constants, variables, and mul/pow nodes. Exponents are required
+    to be constants. If a variable is given, all other variables
+    are seen as constants.
+
+    :param expr: The expression to check.
+    :type expr: ExprLike
+    :return: Whether if the expression has a monomial structure.
+    :rtype: bool
+    """
+    if isinstance(expr, Number | Constant | Var):
+        return True
+    elif isinstance(expr, Mul):
+        return all(is_mono(factor, var) for factor in expr.factors)
+    elif isinstance(expr, Pow):
+        return is_mono(expr.base, var) and is_constant(expr.expo, var)
+    else:
+        return False
+
+
+@typechecked
+def split_mono(expr: ExprLike, var: Var, /) -> tuple[ExprLike, ExprLike]:
+    """
+    Organize the monomial into ax^b form with x being the given variable.
+    Return the tuple of (a, b).
+
+    :param expr: Description
+    :type expr: ExprLike
+    :param var: Description
+    :type var: Var
+    :return: Description
+    :rtype: tuple[ExprLike, ExprLike]
+    """
+
+    if not is_mono(expr, var):
+        raise ValueError(f"a monomial of {var} expected, got {expr}")
+    elif is_constant(expr, var):
+        return (expr, 0)
+
+    expanded = expand(expr)
+    factors = ([expanded.coef] + expanded.factors
+               if isinstance(expanded, Mul) else [expanded])
+    coef = 1
+    expo = 0
+    for factor in factors:
+        if is_constant(factor, var):
+            coef *= factor
+        elif isinstance(factor, Var):
+            expo += 1
+        elif isinstance(factor, Mul):
+            raise ValueError(
+                "Mul instance not expected as monomial is expanded")
+        elif isinstance(factor, Pow):
+            if factor.base == var:
+                expo += factor.expo
+            else:
+                raise ValueError(f"unexpected unconstant power base with"
+                                 f" expanded monomial: {factor.base}")
+        else:
+            raise ValueError(f"unexpected factor: {factor}")
+    return (coef, expo)
+
+
+@typechecked
+def is_poly(expr: ExprLike, var: Var | None = None, /) -> bool:
+    """
+    Determines if the expression is a polynomial only consisting of
+    constants, variables, add/mul/pow nodes. Exponents are required
+    to be constants. Does NOT check if constants are int/frac or if
+    the exponents are integers or positive. If a variable is given,
+    all other variables are seen as constants
+
+    :param expr: The expression to check.
+    :type expr: ExprLike
+    :return: Whether if the expression has a polynomial structure.
+    :rtype: bool
+    """
+    if isinstance(expr, Var) or is_constant(expr, var):
+        return True
+    elif isinstance(expr, Add):
+        return all(is_poly(term, var) for term in expr.terms)
+    elif isinstance(expr, Mul):
+        return all(is_poly(factor, var) for factor in expr.factors)
+    elif isinstance(expr, Pow):
+        return is_poly(expr.base, var) and is_constant(expr.expo, var)
+    else:
+        return False
+
+
+@typechecked
+def is_pos_poly(expr: ExprLike, var: Var | None = None, /) -> bool:
+    """
+    Determines if the expression is a polynomial only consisting of
+    constants, variables, add/mul/pow nodes. Exponents are required
+    to be natural numbers. Does NOT check if constants are int/frac
+    If a variable is given, all other variables are seen as constants.
+
+    :param expr: The expression to check.
+    :type expr: ExprLike
+    :return: Whether if the expression has a natural number exponent
+             only polynomial structure.
+    :rtype: bool
+    """
+    if isinstance(expr, Var) or is_constant(expr, var):
+        return True
+    elif isinstance(expr, Add):
+        return all(is_pos_poly(term, var) for term in expr.terms)
+    elif isinstance(expr, Mul):
+        return all(is_pos_poly(factor, var) for factor in expr.factors)
+    elif isinstance(expr, Pow):
+        return (is_pos_poly(expr.base, var) and isinstance(expr.expo, Number)
+                and expr.expo % 1 == 0 and expr.expo >= 0)
+    else:
+        return False
+
+
+@typechecked
+def is_rat_poly(expr: ExprLike, var: Var | None = None, /) -> bool:
+    """
+    Determines if the expression is a polynomial only consisting of
+    rational constants, variables, add/mul/pow nodes. Does NOT check
+    if the exponents are integers or positive. If a variable is given,
+    all other variables are seen as constants
+
+    :param expr: The expression to check.
+    :type expr: ExprLike
+    :return: Whether if the expression has a rational constant only
+             polynomial structure.
+    :rtype: bool
+    """
+    if isinstance(expr, Var) or is_rat_constant(expr, var):
+        return True
+    elif isinstance(expr, Number):
+        return isinstance(expr, Rational)
+    elif is_constant(expr, var):
+        return True
+    elif isinstance(expr, Add):
+        return isinstance(expr.const, Rational) and all(is_rat_poly(term, var) for term in expr.terms)
+    elif isinstance(expr, Mul):
+        return isinstance(expr.coef, Rational) and all(is_rat_poly(factor, var) for factor in expr.factors)
+    elif isinstance(expr, Pow):
+        return is_rat_poly(expr.base, var) and isinstance(expr.expo, Rational)
+    else:
+        return False
+
+
+@typechecked
+def is_perfect_poly(expr: ExprLike, var: Var | None = None, /) -> bool:
+    """
+    Determines if the expression is a polynomial only consisting of
+    rational constants, variables, add/mul/pow nodes. Exponents are
+    required to be natural numbers. If a variable is given, all other
+    variables are seen as constants
+
+    :param expr: The expression to check.
+    :type expr: ExprLike
+    :return: Whether if the expression has a natural number exponent
+             and rational constants only polynomial structure.
+    :rtype: bool
+    """
+    if isinstance(expr, Var) or is_rat_constant(expr, var):
+        return True
+    elif isinstance(expr, Add):
+        return isinstance(expr.const, Rational) and all(is_perfect_poly(term, var) for term in expr.terms)
+    elif isinstance(expr, Mul):
+        return isinstance(expr.coef, Rational) and all(is_perfect_poly(factor, var) for factor in expr.factors)
+    elif isinstance(expr, Pow):
+        return is_perfect_poly(expr.base, var) and isinstance(expr.expo, int) and expr.expo >= 0
     else:
         return False
 
@@ -1158,10 +1475,7 @@ def apply(expr: ExprLike, func: FunctionType, *args) -> ExprLike:
     :rtype: ExprLike (Expr | Number)
     :raises TypeError: If any argument doesn't match expected type.
     """
-    if isinstance(expr, Number):
-        return expr
-    elif isinstance(expr, Expr):
-        return expr.apply(func, *args)
+    return expr.apply(func, *args) if isinstance(expr, Expr) else expr
 
 
 @typechecked
@@ -1197,10 +1511,7 @@ def subs(expr: ExprLike, expr_map: ExprMap | None = None, /) -> ExprLike:
     :rtype: ExprLike
     :raises TypeError: If any argument doesn't match expected type.
     """
-    if isinstance(expr, Number):
-        return expr
-    elif isinstance(expr, Expr):
-        return expr.subs(expr_map)
+    return expr.subs(expr_map) if isinstance(expr, Expr) else expr
 
 
 @typechecked
@@ -1224,10 +1535,7 @@ def evalf(expr: ExprLike, value_map: ValueMap | None = None, /) -> ExprLike:
     :raises NotImplementedError: If any subclass doesn't have
                                  .evalf() method implemented.
     """
-    if isinstance(expr, Number):
-        return expr
-    elif isinstance(expr, Expr):
-        return expr.evalf(value_map)
+    return expr.evalf(value_map) if isinstance(expr, Expr) else expr
 
 
 # factor_mul is basically using linear/quadratic/cubic/quartic formulas
@@ -1237,9 +1545,7 @@ def evalf(expr: ExprLike, value_map: ValueMap | None = None, /) -> ExprLike:
 # but at some point it's pointless to factor
 @typechecked
 def factor(expr: ExprLike, /) -> ExprLike:
-    if isinstance(expr, Number):
-        return expr
-    return expr
+    return expr if isinstance(expr, Expr) else expr
 
 
 @typechecked
@@ -1252,6 +1558,12 @@ def expand_mul(expr: ExprLike, /) -> ExprLike:
 def expand_pow(expr: ExprLike, /) -> ExprLike:
     """Distribute compact algebra in power."""
     return expr.expand_pow() if isinstance(expr, Expr) else expr
+
+
+@typechecked
+def expand_dist(expr: ExprLike, /) -> ExprLike:
+    """Distribute polynomial in natural number power."""
+    return expr.expand_dist() if isinstance(expr, Expr) else expr
 
 
 @typechecked
@@ -1277,6 +1589,7 @@ def expand(expr: ExprLike, /) -> ExprLike:
         expr = expand_trig(expr)
         expr = expand_log(expr)
         expr = expand_pow(expr)
+        expr = expand_dist(expr)
         expr = expand_mul(expr)
         if original == expr:
             break
@@ -1288,48 +1601,36 @@ def expand(expr: ExprLike, /) -> ExprLike:
 @typechecked
 def reduce(expr: ExprLike, /) -> ExprLike:
     """Combine/factor flattened algebra in multiplication, power, and so on."""
-    if isinstance(expr, Number):
-        return expr
-    return expr
+    return expr if isinstance(expr, Expr) else expr
 
 
 # Reduce rational
 @typechecked
 def cancel(expr: ExprLike, /) -> ExprLike:
-    if isinstance(expr, Number):
-        return expr
-    return expr
+    return expr if isinstance(expr, Expr) else expr
 
 
 # Combine over common denominator
 @typechecked
 def together(expr: ExprLike, /) -> ExprLike:
-    if isinstance(expr, Number):
-        return expr
-    return expr
+    return expr if isinstance(expr, Expr) else expr
 
 
 # Partial fraction decomposition
 @typechecked
 def apart(expr: ExprLike, /) -> ExprLike:
-    if isinstance(expr, Number):
-        return expr
-    return expr
+    return expr if isinstance(expr, Expr) else expr
 
 
 # grouping the expression by variable
 @typechecked
 def collect(expr: ExprLike, var: Var, /) -> ExprLike:
-    if isinstance(expr, Number):
-        return expr
-    return expr
+    return expr if isinstance(expr, Expr) else expr
 
 
 @typechecked
 def simplify(expr: ExprLike, /) -> ExprLike:
-    if isinstance(expr, Number):
-        return expr
-    return expr
+    return expr if isinstance(expr, Expr) else expr
 
 
 @typechecked
@@ -1371,13 +1672,10 @@ def diff(expr: ExprLike, var: Var, /, order: int = 1, *, evaluate=True) -> ExprL
 
 def main():
     x, y, z = symbols("xyz")
-    expr = sum(x ** i for i in range(5))
+    expr = (x * y * 2) ** 2
     print(expr)
-    print(expr.evalf())
-    expr2 = x + y + z
-    print(expr2)
-    print(expr2.evalf())
-    print(expr2.evalf({x: 1}))
+    print(integrate(expr, x))
+    print(integrate(expr, x, 1, 2))
 
 
 if __name__ == "__main__":

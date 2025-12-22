@@ -6,6 +6,9 @@ def expansion_test():
     expr = (x + 1) * (y + 2) * (z + 3)
     print(expr)
     print(expr.expand_mul())
+    expr = (x + y + 3) ** 2
+    print(expr)
+    print(expr.expand_dist())
     expr = (x * y) ** (z + 3)
     print(expr)
     print(expr.expand_pow())
@@ -18,6 +21,32 @@ def expansion_test():
     expr = (x * y * 4) ** ((z + 3) * (y + z + 4))
     print(expr)
     print(expr.expand())
+
+
+def poly_test():
+    x, y = symbols("xy")
+    expr1 = x ** -1 + y ** y  # F, TFTF
+    print(expr1)
+    print(is_poly(expr1))
+    print(is_poly(expr1, x))
+    print(is_pos_poly(expr1, x))
+    print(is_rat_poly(expr1, x))
+    print(is_perfect_poly(expr1, x))
+    print(split_poly(expr1))
+    expr3 = 0.5 * x ** 2 + x + 1  # TTFF
+    print(expr3)
+    print(is_poly(expr3, x))
+    print(is_pos_poly(expr3, x))
+    print(is_rat_poly(expr3, x))
+    print(is_perfect_poly(expr3, x))
+    print(split_poly(expr3))
+    expr2 = x ** 1.5 + x ** -0.5  # TFFF
+    print(expr2)
+    print(is_poly(expr2, x))
+    print(is_pos_poly(expr2, x))
+    print(is_rat_poly(expr2, x))
+    print(is_perfect_poly(expr2, x))
+    print(split_poly(expr2))
 
 
 def derivative_test():
@@ -39,13 +68,7 @@ def derivative_test():
 
 
 def main():
-    # expansion_test()
-    x, y, z = symbols("xyz")
-    expr = 4 - x ** 2
-    print(expr.evalf({x: -2}))
-    print(expr.evalf({x: -1}))
-    print(expr.evalf({x: 0}))
-    print(expr.evalf({x: 1}))
+    expansion_test()
 
 
 if __name__ == "__main__":
