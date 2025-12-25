@@ -1,25 +1,30 @@
 # PeterLib
 
-A common framework library for Python functions like Computer Algebra System (CAS), CLI engine for CLI interface and RPG, RPG profile manager template, Pydantic/dataclass styled data type base class for easier data management and JSON loading/dumping, and future contents to come.
+A math library for Python functions like Computer Algebra System (CAS), incoming set theory implementation, number domains, and future contents to come.
 
 ## Usage
 
 The code in the project is not organized to be executed directly. There are some that require dependency libraries listed in the `requirements.txt`. Example usages might be added in the future.
 
+If used in a folder, put `.` in front of the relative imports, e.g. `utils.py`, to have it work properly. The `__init__.py` is already implemented to contain all content and work with `import *`.
+
 ## Table of Content
 
-- `algebra.py`: Python computer algebra system (CAS).
-- `cliengine.py`: CLI engine for CLI interface and RPG.
-- `datatype.py`: Pydantic/dataclass styled data type base class for easier data management and JSON loading/dumping.
-- `profile_manage.py` and `profile_template`: profile manager with working folder management with `saves` and `settings.json`. The profile class template is for functionality integration with the management code.
+- `utils.py`: Common code for all other usages;
+- `expr.py`: Python computer algebra system (CAS) for mathematical expressions;
+- `xxx_test.py`: Relevant test code for each module and for example usage;
+- `set_theory.py`: (Work In Progress) Set theory logic for number domains, set operations, solution sets and so on;
+- `statement.py`: (Work In Progress) Types for equations, inequalities, diffeq, etc.;
+- `solve.py`: (Work In Progress) Solvers for equations, inequalities, diffeq, etc..
 
 ## Computer Algebra System
 
-This is an experimental/educational project to recreate a computer algebra system to perform algebra and mathematical tasks automatically, like on graphing calculators. The CAS part is motivated by a potential project in generating and checking math practice problems of up to around high school level with the CLIEngine and profile managing code.
+This is an experimental/educational project to recreate a computer algebra system to perform algebra and mathematical tasks automatically, like on graphing calculators. The CAS part is motivated by a potential project in generating and checking math practice problems of up to around high school level with a CLI Engine and profile managing code.
 
 Here are the current structures and functionalities supported or planned:
 
 ### Current Structures
+
 - Expr class to have all other CAS classes as subclasses;
 - Number literals. Complex numbers are supported but not much suggested;
 - Single-letter `Var`. See designer notes below for more information;
@@ -29,6 +34,7 @@ Here are the current structures and functionalities supported or planned:
 - `Limit`, `Derivative`, and `Integral` structures, although mostly not yet functional.
 
 ### Current Functionalities
+
 - Constructing corresponding classes when python operation are used on Expr subclass, done with operator methods;
 - Template for recursive functionality implementation, implementation/structure-planning on following functions:
 - - `doit(expr)`: Evaluating evaluatable limit/derivative/integral structures and plugging in values for known constant radiants in trigs (this part not implemented yet);
@@ -39,6 +45,7 @@ Here are the current structures and functionalities supported or planned:
 - - `integrate(expr, var, a=None, b=None)`: Integration by evaluating an `Integral` instance with given variable and optional bounds. Equivalent to `Integral(expr, var, a, b).doit()`. This only works for monomial/polynomial with basic rules.
 
 ### Planned Structures
+
 - Functions: factorial, ceil, floor, sgn, modulo, exp (construction only).
 - Piecewise functions with binary search optimization for given values;
 - An implementation of set theory to support and organize statements and solutions in a much more systematic manner;
@@ -50,6 +57,7 @@ Here are the current structures and functionalities supported or planned:
 - `Sum` and `Prod` for discrete operations.
 
 ### Planned Functionalities
+
 - Supporting Fraction/Decimal interactions and support better. See designer notes below for more information;
 - Set theory as a class and supporting set theory concepts;
 - Solving equations and inequalities;
@@ -66,6 +74,7 @@ Here are the current structures and functionalities supported or planned:
 - Make multiplication print out more nicely for letters and constants. Potentially flag options.
 
 ### Designer Notes
+
 - For the variable names, an option is to allow especially subscripts to support variable names and literals like A_1 for more variable spaces, but that will make the command line printing more complicated and not support compact multiplication like writing `abc` in place of `a * b * c` as easily. And especially as an experimental/educational project, this will only support single letter variables from latin and greek letters that are not mathematically used yet for now;
 - For the sake of avoiding confusion and reserving the use of python comparison operators, and since python also doesn't have an internal `===` operation other than `is` (which doesn't really work with artificially immutable instances), builtin operations like `==` and `>` will be reserved to compare exprhash values for ordering (which will not call on methods like `simplify()`) instead of creating (in)equality instances;
 - More to inequalities, this will be implemented later with domains, like the integer, rational, real, and complex sets, and constraints, like `x` being positive or negative, that would simplify the process of solving equations and allow solving or simplifying inequalities.
@@ -74,5 +83,6 @@ Here are the current structures and functionalities supported or planned:
 - For the factoring functionality, I would love to try to design and implement a general usage one that works for all polynomials and so on. However, with computers not being able to recognize general patterns in a humane way, factoring looks more like solving for the roots and writing it as the solution form. Therefore, the planned implementation is to use quadratic up to quartic formulas, simplified after plugging in, from the original polynomial or arithmetic series of powers with up to four terms, to arrive to the factoring of polynomials. Note that this would require a lot of progress in `simplify` and more to work for even simpler polynomials to return sane expressions, but this approach will ensure a rather more compatible factoring formula, even at the cost of not recognizing patterns like `x^n-1` always factorable by `x-1` (which is still implementable as exceptions but the logic wouldn't be learned);
 - Both python builtin library types for Fraction and Decimal are supported, but the interactions within them are will still lead to TypeErrors as python doesn't support them by default. This could be overcome later by overriding all the operations or implementing custom fraction/decimal types to allow them and work with the Expr instances better.
 
-## Command Line Engine (CLIEngine)
-A work-in-progress engine for command line interactions for applications. The engine handles the command parsing, basic argument types, and fitting the command to execute the corresponding functions. More documentation will be added as the functionalities refine.
+# License: MIT
+
+[MIT License](./LICENSE.txt)

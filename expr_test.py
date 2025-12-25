@@ -1,4 +1,4 @@
-from algebra import *
+from expr import *
 
 
 def expansion_test():

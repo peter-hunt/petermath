@@ -10,6 +10,60 @@ from typing import Iterable, Union
 
 from typeguard import typechecked
 
+from utils import inherit_docstrings
+
+
+__all__ = [
+    "VARIABLE_LETTERS", "RESERVED_LETTERS",
+    "CanonicalKey",
+
+    "KEY_INT", "KEY_FRC", "KEY_DCM", "KEY_FLT",
+    "KEY_CNS", "KEY_VAR",
+    "KEY_ADD", "KEY_MUL", "KEY_POW",
+    "KEY_FNC",
+    "KEY_LIM", "KEY_DER", "KEY_ITG",
+
+    "FUNC_ABS",
+    "FUNC_SIN", "FUNC_COS", "FUNC_TAN",
+    "FUNC_SEC", "FUNC_CSC", "FUNC_COT",
+    "FUNC_ARCSIN", "FUNC_ARCCOS", "FUNC_ARCTAN",
+    "FUNC_ARCSEC", "FUNC_ARCCSC", "FUNC_ARCCOT",
+    "FUNC_LN", "FUNC_LOG",
+
+    "frdiv", "frpow",
+
+    "float_hash", "decimal_hash",
+    "exprhash", "exprsorted",
+
+    "Expr", "ExprLike",
+    "Var", "ExprMap", "ValueMap", "symbols",
+    "Constant", "ExprMap", "ValueMap",
+    "format_term", "Add",
+    "format_factor", "Mul",
+    "Pow",
+    "Function", "UnaryFunction", "BinaryFunction",
+    "Abs",
+    "Sin", "Cos", "Tan", "Sec", "Csc", "Cot",
+    "Arcsin", "Arccos", "Arctan", "Arcsec", "Arccsc", "Arccot",
+    "Ln", "Log",
+    "Limit", "Derivative", "Integral",
+
+    "is_constant", "is_rat_constant",
+    "is_mono", "split_mono",
+    "is_poly", "is_pos_poly", "is_rat_poly", "is_perfect_poly", "split_poly",
+
+    "apply",
+    "doit", "subs", "evalf",
+
+    "factor",
+    "expand_mul", "expand_pow", "expand_distribute", "expand_trig", "expand_log",
+    "expand",
+    "reduce", "cancel", "together", "apart", "collect",
+    "simplify",
+
+    "_diff", "diff", "integrate",
+]
+
 
 VARIABLE_LETTERS = (
     "abcdefghijklmnopqrstuvwxyz"
@@ -19,27 +73,6 @@ VARIABLE_LETTERS = (
 )
 
 RESERVED_LETTERS = "eπφΣΠ"
-
-
-def inherit_docstrings(cls: type) -> type:
-    """
-    Decorator for the subclass to inherit the class methods
-    docstrings if it doesn't override it.
-
-    :param cls: The parent class
-    :type cls: type
-    :return: The class with the method docstrings filled.
-    :rtype: type
-    """
-    for name, attr in cls.__dict__.items():
-        func = getattr(cls, name)
-        if not getattr(func, "__doc__", None):
-            for base in cls.__mro__[1:]:
-                parent = getattr(base, name, None)
-                if parent and getattr(parent, "__doc__", None):
-                    func.__doc__ = parent.__doc__
-                    break
-    return cls
 
 
 CanonicalKey = tuple[int | float | tuple, ...]
@@ -59,20 +92,20 @@ KEY_DER = 11
 KEY_ITG = 12
 
 FUNC_ABS = 0
-FUNC_SIN = 0
-FUNC_COS = 0
-FUNC_TAN = 0
-FUNC_SEC = 0
-FUNC_CSC = 0
-FUNC_COT = 0
-FUNC_ARCSIN = 0
-FUNC_ARCCOS = 0
-FUNC_ARCTAN = 0
-FUNC_ARCSEC = 0
-FUNC_ARCCSC = 0
-FUNC_ARCCOT = 0
-FUNC_LN = 0
-FUNC_LOG = 0
+FUNC_SIN = 1
+FUNC_COS = 2
+FUNC_TAN = 3
+FUNC_SEC = 4
+FUNC_CSC = 5
+FUNC_COT = 6
+FUNC_ARCSIN = 7
+FUNC_ARCCOS = 8
+FUNC_ARCTAN = 9
+FUNC_ARCSEC = 10
+FUNC_ARCCSC = 11
+FUNC_ARCCOT = 12
+FUNC_LN = 13
+FUNC_LOG = 14
 
 
 @typechecked
@@ -159,7 +192,7 @@ class Expr:
             expr = expand_trig(expr)
             expr = expand_log(expr)
             expr = expand_pow(expr)
-            expr = expand_dist(expr)
+            expr = expand_distribute(expr)
             expr = expand_mul(expr)
             if original == expr:
                 break
@@ -397,13 +430,13 @@ def frpow(a: ExprLike, b: ExprLike, /) -> ExprLike:
 
 # Convert float -> 8 bytes big-endian → integer
 @typechecked
-def float_bits(x: float, /) -> int:
+def float_hash(x: float, /) -> int:
     """Convert float to an integer hash."""
     return int.from_bytes(pack(">d", x), "big")
 
 
 @typechecked
-def decimal_to_int_tuple(d: Decimal):
+def decimal_hash(d: Decimal):
     """Convert Decimal to integer tuple hash."""
     sign, digits, exp = d.as_tuple()
     mantissa = 0
@@ -429,9 +462,9 @@ def exprhash(expr: ExprLike, /) -> tuple[int | tuple, ...]:
     elif isinstance(expr, Fraction):
         return (KEY_FRC, float(expr), expr.numerator)
     elif isinstance(expr, Decimal):
-        return (KEY_DCM,) + decimal_to_int_tuple(expr)
+        return (KEY_DCM,) + decimal_hash(expr)
     elif isinstance(expr, float):
-        return (KEY_FLT, float_bits(expr))
+        return (KEY_FLT, float_hash(expr))
     elif isinstance(expr, Expr):
         return expr.exprhash()
     elif isinstance(expr, Number):
@@ -506,6 +539,19 @@ ExprMap = dict[Var, ExprLike]
 ValueMap = dict[Var, Number]
 
 
+@typechecked
+def symbols(letters: str, /) -> tuple[Var, ...]:
+    """
+    Creates variable instance(s) supporting multiple letters.
+
+    :param letters: The letters of the variables.
+    :type letters: str
+    :return: A tuple of the variable instance(s).
+    :rtype: tuple[Var]
+    """
+    return tuple(Var(letter) for letter in letters)
+
+
 @inherit_docstrings
 class Constant(Expr):
     name: str
@@ -541,6 +587,11 @@ class Constant(Expr):
         return 0
 
 
+e = Constant('e', math_e)
+pi = π = Constant('π', math_pi)
+phi = φ = Constant('φ', (1 + sqrt(5)) / 2)
+
+
 def format_term(term: ExprLike, /) -> tuple[bool, str]:
     """Format term for Add instance printing."""
     if isinstance(term, Mul):
@@ -549,11 +600,6 @@ def format_term(term: ExprLike, /) -> tuple[bool, str]:
         elif len(term.factors) == 1 and term.coef < 0:
             return (False, f"{Mul(-term.coef, term.factors[0])}")
     return (True, f"{term}")
-
-
-e = Constant('e', math_e)
-pi = π = Constant('π', math_pi)
-phi = φ = Constant('φ', (1 + sqrt(5)) / 2)
 
 
 @inherit_docstrings
@@ -1257,11 +1303,6 @@ class Derivative(Expr):
         return _diff(self.doit(), var)
 
 
-def integrate(expr: ExprLike, var: Var,
-              a: ExprLike | None = None, b: ExprLike | None = None, /):
-    return Integral(expr, var, a, b).doit()
-
-
 @inherit_docstrings
 class Integral(Expr):
     expr: ExprLike
@@ -1331,6 +1372,7 @@ class Integral(Expr):
             return sum(integrate(mono, self.var)
                        for mono in split_poly(expanded))
 
+    # TODO: Risch/Risch-Norman algorithm
     def _doit(self) -> ExprLike:
         indef_result = self.indef_doit()
         if indef_result is None:
@@ -1346,19 +1388,6 @@ class Integral(Expr):
         else:
             result = doit(self)
             return result if isinstance(result, Integral) else result._diff(var)
-
-
-@typechecked
-def symbols(letters: str, /) -> tuple[Var, ...]:
-    """
-    Creates variable instance(s) supporting multiple letters.
-
-    :param letters: The letters of the variables.
-    :type letters: str
-    :return: A tuple of the variable instance(s).
-    :rtype: tuple[Var]
-    """
-    return tuple(Var(letter) for letter in letters)
 
 
 @typechecked
@@ -1443,22 +1472,6 @@ def is_rat_constant(expr: ExprLike, var: Var | None = None, /) -> bool:
                 and is_rat_constant(expr.a, var) and is_rat_constant(expr.b, var))
     else:
         return False
-
-
-@typechecked
-def split_poly(expr: ExprLike, /) -> list[ExprLike]:
-    """
-    Return a list of addition operants or the expression itself if not
-    an add node. Useful for processing polynomials into monomials when
-    checked to be polynomials.
-
-    :param expr: The expression to split.
-    :type expr: ExprLike
-    :return: The list of addition operants or
-             a list of the expressiion itself.
-    :rtype: list[ExprLike]
-    """
-    return [expr.const] + expr.terms if isinstance(expr, Add) else [expr]
 
 
 @typechecked
@@ -1637,6 +1650,22 @@ def is_perfect_poly(expr: ExprLike, var: Var | None = None, /) -> bool:
 
 
 @typechecked
+def split_poly(expr: ExprLike, /) -> list[ExprLike]:
+    """
+    Return a list of addition operants or the expression itself if not
+    an add node. Useful for processing polynomials into monomials when
+    checked to be polynomials.
+
+    :param expr: The expression to split.
+    :type expr: ExprLike
+    :return: The list of addition operants or
+             a list of the expressiion itself.
+    :rtype: list[ExprLike]
+    """
+    return [expr.const] + expr.terms if isinstance(expr, Add) else [expr]
+
+
+@typechecked
 def apply(expr: ExprLike, func: FunctionType, *args) -> ExprLike:
     """
     Recursively apply some function with ExprLike instance.
@@ -1742,7 +1771,7 @@ def expand_pow(expr: ExprLike, /) -> ExprLike:
 
 
 @typechecked
-def expand_dist(expr: ExprLike, /) -> ExprLike:
+def expand_distribute(expr: ExprLike, /) -> ExprLike:
     """Distribute polynomial in natural number power."""
     return expr.expand_dist() if isinstance(expr, Expr) else expr
 
@@ -1770,7 +1799,7 @@ def expand(expr: ExprLike, /) -> ExprLike:
         expr = expand_trig(expr)
         expr = expand_log(expr)
         expr = expand_pow(expr)
-        expr = expand_dist(expr)
+        expr = expand_distribute(expr)
         expr = expand_mul(expr)
         if original == expr:
             break
@@ -1850,6 +1879,12 @@ def diff(expr: ExprLike, var: Var, /, order: int = 1, *, evaluate=True) -> ExprL
     :rtype: Expr | Number
     """
     return expr.diff(var, order, evaluate=evaluate) if isinstance(expr, Expr) else 0
+
+
+@typechecked
+def integrate(expr: ExprLike, var: Var,
+              a: ExprLike | None = None, b: ExprLike | None = None, /):
+    return Integral(expr, var, a, b).doit()
 
 
 def main():

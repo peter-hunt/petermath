@@ -1,2 +1,0 @@
-class ProfileTemplate:
-    pass
