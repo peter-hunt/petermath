@@ -1,21 +1,21 @@
-# PeterLib
+# PeterMath
 
-A math library for Python functions like Computer Algebra System (CAS), incoming set theory implementation, number domains, and future contents to come.
+A math library for Python functions like Computer Algebra System (CAS) for math expressions, set theory and number domains, equation/inequality solvers, and future contents to come.
 
 ## Usage
 
-The code in the project is not organized to be executed directly. There are some that require dependency libraries listed in the `requirements.txt`. Example usages might be added in the future.
+The code in the project is not organized to be executed directly. There are some that require dependency libraries listed in the `requirements.txt`. Example usages might be added in the future. See documentations and test code for example usages for now.
 
 If used in a folder, put `.` in front of the relative imports, e.g. `utils.py`, to have it work properly. The `__init__.py` is already implemented to contain all content and work with `import *`.
 
 ## Table of Content
 
-- `utils.py`: Common code for all other usages;
 - `expr.py`: Python computer algebra system (CAS) for mathematical expressions;
 - `xxx_test.py`: Relevant test code for each module and for example usage;
 - `set_theory.py`: (Work In Progress) Set theory logic for number domains, set operations, solution sets and so on;
 - `statement.py`: (Work In Progress) Types for equations, inequalities, diffeq, etc.;
 - `solve.py`: (Work In Progress) Solvers for equations, inequalities, diffeq, etc..
+- `utils.py`: Common code for all other usages;
 
 ## Computer Algebra System
 
