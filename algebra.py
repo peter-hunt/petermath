@@ -1,3 +1,4 @@
+from decimal import Decimal
 from fractions import Fraction
 from itertools import product as iterprod
 from math import e as math_e, pi as math_pi, \
@@ -45,16 +46,17 @@ CanonicalKey = tuple[int | float | tuple, ...]
 
 KEY_INT = 0
 KEY_FRC = 1
-KEY_FLT = 2
-KEY_CNS = 3
-KEY_VAR = 4
-KEY_ADD = 5
-KEY_MUL = 6
-KEY_POW = 7
-KEY_FNC = 8
-KEY_LIM = 9
-KEY_DER = 10
-KEY_ITG = 11
+KEY_DCM = 2
+KEY_FLT = 3
+KEY_CNS = 4
+KEY_VAR = 5
+KEY_ADD = 6
+KEY_MUL = 7
+KEY_POW = 8
+KEY_FNC = 9
+KEY_LIM = 10
+KEY_DER = 11
+KEY_ITG = 12
 
 FUNC_ABS = 0
 FUNC_SIN = 0
@@ -233,10 +235,34 @@ class Expr:
         return hash(self.exprhash())
 
     def exprhash(self) -> CanonicalKey:
+        """
+        Hash tuple generator for expressions.
+        Use the global function for supported int/float/Fraction/Decimal numbers.
+        This is used for sorting and hashing expressions.
+
+        :param self: The expression instance.
+        :return: The tuple of relevant information.
+        :rtype: tuple[int | tuple, ...]
+        """
         raise NotImplementedError
 
     def __eq__(self, other: Union["Expr", Number]) -> bool:
-        return isinstance(other, (Expr, Number)) and exprhash(self) == exprhash(other)
+        if isinstance(other, (Expr, Number)):
+            return exprhash(self) == exprhash(other)
+        else:
+            return NotImplemented
+
+    def __gt__(self, other: Union["Expr", Number]) -> bool:
+        if isinstance(other, (Expr, Number)):
+            return exprhash(self) > exprhash(other)
+        else:
+            return NotImplemented
+
+    def __lt__(self, other: Union["Expr", Number]) -> bool:
+        if isinstance(other, (Expr, Number)):
+            return exprhash(self) < exprhash(other)
+        else:
+            return NotImplemented
 
     def __add__(self, other: Union["Expr", Number]) -> Union["Expr", Number]:
         if other == 0:
@@ -377,10 +403,20 @@ def float_bits(x: float, /) -> int:
 
 
 @typechecked
+def decimal_to_int_tuple(d: Decimal):
+    """Convert Decimal to integer tuple hash."""
+    sign, digits, exp = d.as_tuple()
+    mantissa = 0
+    for x in digits:
+        mantissa = mantissa * 10 + x
+    return (1 - sign, mantissa, exp)
+
+
+@typechecked
 def exprhash(expr: ExprLike, /) -> tuple[int | tuple, ...]:
     """
     Hash tuple generator for expressions and numbers.
-    Only int/float/Fraction are supported as non-Expr numbers.
+    Only int/float/Fraction/Decimal are supported as non-Expr numbers.
     This is used for sorting and hashing expressions.
 
     :param expr: The expression or number to hash.
@@ -391,7 +427,9 @@ def exprhash(expr: ExprLike, /) -> tuple[int | tuple, ...]:
     if isinstance(expr, int):
         return (KEY_INT, expr)
     elif isinstance(expr, Fraction):
-        return (KEY_INT, float(expr), expr.numerator)
+        return (KEY_FRC, float(expr), expr.numerator)
+    elif isinstance(expr, Decimal):
+        return (KEY_DCM,) + decimal_to_int_tuple(expr)
     elif isinstance(expr, float):
         return (KEY_FLT, float_bits(expr))
     elif isinstance(expr, Expr):

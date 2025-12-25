@@ -41,9 +41,18 @@ Here are the current structures and functionalities supported or planned:
 ### Planned Structures
 - Functions: factorial, ceil, floor, sgn, modulo, exp (construction only).
 - Piecewise functions with binary search optimization for given values;
-- Equations and inequality structures. See designer notes below for more information.
+- An implementation of set theory to support and organize statements and solutions in a much more systematic manner;
+- `Statement` class with equations and inequalities:
+  - Equality and solving equations;
+  - Inequality structures. See designer notes below for more information.
+- `Set` class with `Interval`, `FiniteSet`, `Union`, `Integer`, `Rational`, `Real`, and `Complex`;
+- Contraints like domain sets and intervals to feed into statements;
+- `Sum` and `Prod` for discrete operations.
 
 ### Planned Functionalities
+- Supporting Fraction/Decimal interactions and support better. See designer notes below for more information;
+- Set theory as a class and supporting set theory concepts;
+- Solving equations and inequalities;
 - Limit and integral evaluation with function to construct or evaluate;
 - The series of factor/combine functions to factor `Add`, `Mul` and combine `Ln`/`Log`, trigs and so on;
 - Fraction operations:
@@ -51,7 +60,6 @@ Here are the current structures and functionalities supported or planned:
 - - `together()`: Combining factors with common denominator.
 - - `apart()`: Partial fraction decomposition.
 - - `collect()`: Grouping the expression, or mostly polynomials, by the powers of one variable.
-- Solving equations and inequalities;
 - Implementing `doit()` functionalities for trig constant values.
 - Implementing `simplify()` after implementing the factor/combine and all the fraction ones.
 - Use binomial coefficients or similar combinatorics to optimize power of sum distribution.
@@ -59,10 +67,12 @@ Here are the current structures and functionalities supported or planned:
 
 ### Designer Notes
 - For the variable names, an option is to allow especially subscripts to support variable names and literals like A_1 for more variable spaces, but that will make the command line printing more complicated and not support compact multiplication like writing `abc` in place of `a * b * c` as easily. And especially as an experimental/educational project, this will only support single letter variables from latin and greek letters that are not mathematically used yet for now;
-- For implementing and supporting equations and inequalities, it would make sense to make the python comparison symbols trigger creating corresponding instance. However, for the sake of refering to checking expression equality and python not having internal `===` other than `is`, which doesn't really work with artificially immutable instances, the default `==` will be reserved for checking for direct equality after simplication, for example. In addition, to reduce computational burden and avoid potential confusion, the equality check by `==` will not automatically call on `simplify` or related methods;
+- For the sake of avoiding confusion and reserving the use of python comparison operators, and since python also doesn't have an internal `===` operation other than `is` (which doesn't really work with artificially immutable instances), builtin operations like `==` and `>` will be reserved to compare exprhash values for ordering (which will not call on methods like `simplify()`) instead of creating (in)equality instances;
+- More to inequalities, this will be implemented later with domains, like the integer, rational, real, and complex sets, and constraints, like `x` being positive or negative, that would simplify the process of solving equations and allow solving or simplifying inequalities.
 - Although I haven't found an instance that leads to this, the currently planned logic for `expand()` with applying all the basic expansion functions might lead to different results for different expanding order, which could be avoided by changing the order or ensuring that the expansion logic won't lead to separate local results; the same applies for other methods that might return unexpectedly different results. Just for future reference;
 - With the current `evalf()` implementation, the value map allows missing variables or even with empty value. This is by design since this would potentially allow faster evaluation specified on the variable(s) left out, and it will also support the passing of some partial value map that isn't related to this specific expression;
-- For the factoring functionality, I would love to try to design and implement a general usage one that works for all polynomials and so on. However, with computers not being able to recognize general patterns in a humane way, factoring looks more like solving for the roots and writing it as the solution form. Therefore, the planned implementation is to use quadratic up to quartic formulas, simplified after plugging in, from the original polynomial or arithmetic series of powers with up to four terms, to arrive to the factoring of polynomials. Note that this would require a lot of progress in `simplify` and more to work for even simpler polynomials to return sane expressions, but this approach will ensure a rather more compatible factoring formula, even at the cost of not recognizing patterns like `x^n-1` always factorable by `x-1` (which is still implementable as exceptions but the logic wouldn't be learned).
+- For the factoring functionality, I would love to try to design and implement a general usage one that works for all polynomials and so on. However, with computers not being able to recognize general patterns in a humane way, factoring looks more like solving for the roots and writing it as the solution form. Therefore, the planned implementation is to use quadratic up to quartic formulas, simplified after plugging in, from the original polynomial or arithmetic series of powers with up to four terms, to arrive to the factoring of polynomials. Note that this would require a lot of progress in `simplify` and more to work for even simpler polynomials to return sane expressions, but this approach will ensure a rather more compatible factoring formula, even at the cost of not recognizing patterns like `x^n-1` always factorable by `x-1` (which is still implementable as exceptions but the logic wouldn't be learned);
+- Both python builtin library types for Fraction and Decimal are supported, but the interactions within them are will still lead to TypeErrors as python doesn't support them by default. This could be overcome later by overriding all the operations or implementing custom fraction/decimal types to allow them and work with the Expr instances better.
 
 ## Command Line Engine (CLIEngine)
 A work-in-progress engine for command line interactions for applications. The engine handles the command parsing, basic argument types, and fitting the command to execute the corresponding functions. More documentation will be added as the functionalities refine.
