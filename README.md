@@ -46,18 +46,21 @@ Here are the current structures and functionalities supported or planned:
 
 ### Planned Structures
 
-- Functions: factorial, ceil, floor, sgn, modulo, exp (construction only).
-- Piecewise functions with binary search optimization for given values;
 - An implementation of set theory to support and organize statements and solutions in a much more systematic manner;
 - `Statement` class with equations and inequalities:
   - Equality and solving equations;
   - Inequality structures. See designer notes below for more information.
 - `Set` class with `Interval`, `FiniteSet`, `Union`, `Integer`, `Rational`, `Real`, and `Complex`;
+  - And the `SetBuilder` with separate code since it requires the `Statement` class, which requires `Set` class for the number domains.
 - Contraints like domain sets and intervals to feed into statements;
+- Functions: factorial, ceil, floor, sgn, modulo, exp (construction only).
+- Piecewise functions with binary search optimization for given values;
 - `Sum` and `Prod` for discrete operations.
 
 ### Planned Functionalities
 
+- Expand `exprhash` to be `mathhash` instead;
+- Organize the `expr.Constant` under `Expr` to be in `constants.py` instead to work with other constants and make `ExprLike` include those constants;
 - Supporting Fraction/Decimal interactions and support better. See designer notes below for more information;
 - Set theory as a class and supporting set theory concepts;
 - Solving equations and inequalities;

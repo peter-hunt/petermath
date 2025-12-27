@@ -1,22 +1,31 @@
+from decimal import Decimal
+from fractions import Fraction
+from numbers import Number, Integral, Rational, Real, Complex
+
+
 __all__ = [
     "Set",
-    "Interval", "EmptySet", "FiniteSet",
+    "ConstInterval", "EmptySet", "FiniteSet",
     "Union", "Intersection", "Difference", "Complement",
-    "SetBuilder",
     "NumberDomain", "NaturalSet", "IntegerSet", "RationalSet", "RealSet", "ComplexeSet",
 ]
 
 
 class Set:
-    pass
+    def __contains__(self, item: any) -> bool:
+        return NotImplemented
 
 
-class Interval(Set):
-    pass
+class ConstInterval(Set):
+    a: Real  # lower bound
+    b: Real  # upper bound
+    a_inc: bool = False  # being false doesn't exclude infinity
+    b_inc: bool = False  # being false doesn't exclude infinity
 
 
 class EmptySet(Set):
-    pass
+    def __contains__(self, item: any) -> bool:
+        return False
 
 
 class FiniteSet(Set):
@@ -39,29 +48,67 @@ class Complement(Set):
     pass
 
 
-class SetBuilder(Set):
-    pass
-
-
 class NumberDomain(Set):
-    pass
+    letter: str
+
+    def __repr__(self):
+        return f"{type(self).__name__}()"
+
+    def __str__(self):
+        return self.letter
 
 
 class NaturalSet(NumberDomain):
-    pass
+    letter: str = 'ℕ'
+
+    def __contains__(self, item: any) -> bool:
+        return isinstance(item, Integral) and item >= 0
 
 
 class IntegerSet(NumberDomain):
-    pass
+    letter: str = 'ℤ'
+
+    def __contains__(self, item: any) -> bool:
+        return isinstance(item, Integral)
 
 
 class RationalSet(NumberDomain):
-    pass
+    letter: str = 'ℚ'
+
+    def __contains__(self, item: any) -> bool:
+        return isinstance(item, Rational | Decimal)
 
 
 class RealSet(NumberDomain):
-    pass
+    letter: str = 'ℝ'
+
+    def __contains__(self, item: any) -> bool:
+        return isinstance(item, Real | Decimal)
 
 
 class ComplexeSet(NumberDomain):
-    pass
+    letter: str = 'ℂ'
+
+    def __contains__(self, item: any) -> bool:
+        return isinstance(item, Complex)
+
+
+def main():
+    N = NaturalSet()
+    Z = IntegerSet()
+    Q = RationalSet()
+    R = RealSet()
+    C = ComplexeSet()
+    print(N)
+    print(isinstance(1, Integral))
+    print(isinstance(1.0, Integral))
+    print(isinstance(Decimal("1.0"), Integral))
+    print(isinstance(Fraction(2, 1), Integral))
+    print(isinstance(1.1, Complex))
+    print(isinstance(Decimal("1.0"), Complex))
+    print(isinstance(Fraction(2, 3), Complex))
+    print(isinstance(0+0j, Complex))
+
+
+if __name__ == "__main__":
+    main()
