@@ -1,3 +1,7 @@
+from expr import ExprLike
+from set_theory import Set
+
+
 __all__ = [
     "Statement",
     "Equality",
@@ -8,44 +12,55 @@ __all__ = [
 
 
 class Statement:
-    pass
+    def __init__(self, *args, **kwargs):
+        raise Exception(
+            "Cannot create an instance of base Statement class. "
+            "To use a subclass, redefine the init code."
+        )
 
 
 class Equality(Statement):
-    pass
+    lhs: ExprLike
+    rhs: ExprLike
 
 
 class Inequality(Statement):
-    pass
+    lhs: ExprLike
+    rhs: ExprLike
 
 
 class GreaterThan(Inequality):
-    pass
+    lhs: ExprLike
+    rhs: ExprLike
 
 
 class GreaterOrEqual(Inequality):
-    pass
+    lhs: ExprLike
+    rhs: ExprLike
 
 
 class LessThan(Inequality):
-    pass
+    lhs: ExprLike
+    rhs: ExprLike
 
 
 class LessOrEqual(Inequality):
-    pass
+    lhs: ExprLike
+    rhs: ExprLike
 
 
 class Membership(Statement):
-    pass
+    element: ExprLike
+    set_: Set
 
 
 class LogicNeg(Statement):
-    pass
+    operand: Statement
 
 
 class LogicOr(Statement):
-    pass
+    operands: list[Statement]
 
 
 class LogicAnd(Statement):
-    pass
+    operands: list[Statement]

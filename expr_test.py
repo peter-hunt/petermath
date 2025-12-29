@@ -67,8 +67,33 @@ def derivative_test():
     print(expr2.doit())
 
 
+def special_constant_test():
+    x = Var('x')
+    print(inf + 1)  # Infinity
+    print(-inf + 1)  # -Infinity
+    print(inf * 0)  # Undefined
+    print(inf - inf)  # Undefined
+    print(inf + inf)  # Infinity
+    print(-inf - inf)  # -Infinity
+    print(inf * 3)  # Infinity
+    print(-inf * 3)  # -Infinity
+    print(-7 * -inf)  # Infinity
+    print(-inf * 5)  # -Infinity
+    print(inf / inf)  # Undefined
+    print(inf / 4)  # Infinity
+    print(inf / -2)  # -Infinity
+    print(-inf / -3)  # Infinity
+    print(-inf / 7)  # -Infinity
+    print((-inf) ** 2)  # Infinity
+    print(0 ** inf)  # 0
+    print(0 ** -inf)  # Undefined
+    print((x ** 2).subs({x: 0}))  # 0
+    print(x ** 0).subs({x: 0})  # Undefined
+    print(x ** -3).subs({x: 0})  # Undefined
+
+
 def main():
-    expansion_test()
+    special_constant_test()
 
 
 if __name__ == "__main__":

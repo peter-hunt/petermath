@@ -1,17 +1,24 @@
-from decimal import Decimal
-from fractions import Fraction
-from numbers import Number, Integral, Rational, Real, Complex
+from numbers import Integral, Rational, Real, Complex
+
+from expr import ExprLike
 
 
 __all__ = [
     "Set",
     "ConstInterval", "EmptySet", "FiniteSet",
     "Union", "Intersection", "Difference", "Complement",
-    "NumberDomain", "NaturalSet", "IntegerSet", "RationalSet", "RealSet", "ComplexeSet",
+    "NumberDomain", "NaturalSet", "IntegerSet", "RationalSet", "RealSet", "ComplexSet",
+    "NSet", "ZSet", "QSet", "RSet", "CSet",
 ]
 
 
 class Set:
+    def __init__(self, *args, **kwargs):
+        raise Exception(
+            "Cannot create an instance of base Set class. "
+            "To use a subclass, redefine the init code."
+        )
+
     def __contains__(self, item: any) -> bool:
         return NotImplemented
 
@@ -29,23 +36,24 @@ class EmptySet(Set):
 
 
 class FiniteSet(Set):
-    pass
+    elements: tuple[ExprLike]
 
 
 class Union(Set):
-    pass
+    sets: list[Set]
 
 
 class Intersection(Set):
-    pass
+    sets: list[Set]
 
 
 class Difference(Set):
-    pass
+    left: Set
+    right: Set
 
 
 class Complement(Set):
-    pass
+    set_: Set
 
 
 class NumberDomain(Set):
@@ -76,38 +84,32 @@ class RationalSet(NumberDomain):
     letter: str = 'ℚ'
 
     def __contains__(self, item: any) -> bool:
-        return isinstance(item, Rational | Decimal)
+        return isinstance(item, Rational)
 
 
 class RealSet(NumberDomain):
     letter: str = 'ℝ'
 
     def __contains__(self, item: any) -> bool:
-        return isinstance(item, Real | Decimal)
+        return isinstance(item, Real)
 
 
-class ComplexeSet(NumberDomain):
+class ComplexSet(NumberDomain):
     letter: str = 'ℂ'
 
     def __contains__(self, item: any) -> bool:
         return isinstance(item, Complex)
 
 
+NSet = NaturalSet()
+ZSet = IntegerSet()
+QSet = RationalSet()
+RSet = RealSet()
+CSet = ComplexSet()
+
+
 def main():
-    N = NaturalSet()
-    Z = IntegerSet()
-    Q = RationalSet()
-    R = RealSet()
-    C = ComplexeSet()
-    print(N)
-    print(isinstance(1, Integral))
-    print(isinstance(1.0, Integral))
-    print(isinstance(Decimal("1.0"), Integral))
-    print(isinstance(Fraction(2, 1), Integral))
-    print(isinstance(1.1, Complex))
-    print(isinstance(Decimal("1.0"), Complex))
-    print(isinstance(Fraction(2, 3), Complex))
-    print(isinstance(0+0j, Complex))
+    pass
 
 
 if __name__ == "__main__":

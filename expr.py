@@ -1,8 +1,10 @@
 from decimal import Decimal
 from fractions import Fraction
 from itertools import product as iterprod
-from math import e as math_e, pi as math_pi, \
-    sqrt, prod, sin, cos, tan, log, asin, acos, atan
+from math import e as math_e, pi as math_pi, tau as math_tau, \
+    sqrt, prod, sin, cos, tan, log, asin, acos, atan, \
+    inf as math_inf, nan as math_nan, \
+    isinf as math_isinf, isnan as math_isnan, isfinite as math_isfinite
 from numbers import Number, Rational
 from struct import pack
 from types import FunctionType
@@ -35,9 +37,14 @@ __all__ = [
     "float_hash", "decimal_hash",
     "exprhash", "exprsorted",
 
+    "cast_number", "number_casted",
+    "cast_map", "map_casted",
     "Expr", "ExprLike",
     "Var", "ExprMap", "ValueMap", "symbols",
     "Constant", "ExprMap", "ValueMap",
+    "e", "pi", "tau", "phi",
+    "inf", "undefined",
+    "is_special_const", "is_literal", "is_infinite", "is_finite", "get_sign",
     "format_term", "Add",
     "format_factor", "Mul",
     "Pow",
@@ -72,45 +79,63 @@ VARIABLE_LETTERS = (
     "ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ"
 )
 
-RESERVED_LETTERS = "eπφΣΠ"
+RESERVED_LETTERS = "eπτφΣΠ"
 
 
 CanonicalKey = tuple[int | float | tuple, ...]
 
+# autopep8: off
 KEY_INT = 0
 KEY_FRC = 1
-KEY_DCM = 2
-KEY_FLT = 3
-KEY_CNS = 4
-KEY_VAR = 5
-KEY_ADD = 6
-KEY_MUL = 7
-KEY_POW = 8
-KEY_FNC = 9
-KEY_LIM = 10
-KEY_DER = 11
-KEY_ITG = 12
+KEY_FLT = 2
+KEY_CNS = 3
+KEY_VAR = 4
+KEY_ADD = 5
+KEY_MUL = 6
+KEY_POW = 7
+KEY_FNC = 8
+KEY_LIM = 9
+KEY_DER = 10
+KEY_ITG = 11
 
-FUNC_ABS = 0
-FUNC_SIN = 1
-FUNC_COS = 2
-FUNC_TAN = 3
-FUNC_SEC = 4
-FUNC_CSC = 5
-FUNC_COT = 6
+CONSTKEY_INF    = 0
+CONSTKEY_NEGINF = 1
+CONSTKEY_UNDEF  = 2
+
+FUNC_ABS    = 0
+FUNC_SIN    = 1
+FUNC_COS    = 2
+FUNC_TAN    = 3
+FUNC_SEC    = 4
+FUNC_CSC    = 5
+FUNC_COT    = 6
 FUNC_ARCSIN = 7
 FUNC_ARCCOS = 8
 FUNC_ARCTAN = 9
 FUNC_ARCSEC = 10
 FUNC_ARCCSC = 11
 FUNC_ARCCOT = 12
-FUNC_LN = 13
-FUNC_LOG = 14
+FUNC_LN     = 13
+FUNC_LOG    = 14
+# autopep8: on
+
+
+def number_casted(func: FunctionType) -> FunctionType:
+    def wrapper(*args, **kwargs):
+        return func(*(cast_number(arg) for arg in args),
+                    **{key: cast_number(value) for key, value in kwargs.items()})
+    return wrapper
+
+
+def map_casted(func: FunctionType) -> FunctionType:
+    def wrapper(self, expr_map):
+        return func(self, cast_map(expr_map))
+    return wrapper
 
 
 @typechecked
 class Expr:
-    def __init__(self, *args):
+    def __init__(self, *args, **kwargs):
         raise Exception(
             "Cannot create an instance of base Expr class. "
             "To use a subclass, redefine the init code."
@@ -205,6 +230,7 @@ class Expr:
     def _doit(self) -> Union["Expr", Number]:
         return self
 
+    @map_casted
     def subs(self, expr_map: dict["Var", Union["Expr", Number]] | None = None, /) -> Union["Expr", Number]:
         return self.apply(lambda x: x if isinstance(x, Number) else x._subs(expr_map))
 
@@ -270,7 +296,7 @@ class Expr:
     def exprhash(self) -> CanonicalKey:
         """
         Hash tuple generator for expressions.
-        Use the global function for supported int/float/Fraction/Decimal numbers.
+        Use the global function for supported int/float/Fraction numbers.
         This is used for sorting and hashing expressions.
 
         :param self: The expression instance.
@@ -285,21 +311,23 @@ class Expr:
         else:
             return NotImplemented
 
-    def __gt__(self, other: Union["Expr", Number]) -> bool:
-        if isinstance(other, (Expr, Number)):
-            return exprhash(self) > exprhash(other)
-        else:
-            return NotImplemented
-
-    def __lt__(self, other: Union["Expr", Number]) -> bool:
-        if isinstance(other, (Expr, Number)):
-            return exprhash(self) < exprhash(other)
-        else:
-            return NotImplemented
-
+    @number_casted
     def __add__(self, other: Union["Expr", Number]) -> Union["Expr", Number]:
-        if other == 0:
+        if self == undefined or other == undefined:
+            return undefined
+        elif other == 0:
             return self
+        elif is_literal(self) and is_literal(other):
+            if (self == inf and is_finite(other) or other == inf and is_finite(self)
+                    or self == inf and other == inf):
+                return inf
+            elif (self == -inf and is_finite(other) or other == -inf and is_finite(self)
+                    or self == -inf and other == -inf):
+                return -inf
+            elif self == inf and other == -inf or other == inf and self == -inf:
+                return undefined
+            else:
+                return Add(self, other)
         elif isinstance(self, Add) and isinstance(other, Add):
             return Add(self.const + other.const, *self.terms, *other.terms)
         elif isinstance(self, Add) and isinstance(other, Number):
@@ -311,9 +339,19 @@ class Expr:
         else:
             return Add(self, other)
 
+    @number_casted
     def __radd__(self, other: Union["Expr", Number]) -> Union["Expr", Number]:
-        if other == 0:
+        if self == undefined or other == undefined:
+            return undefined
+        elif other == 0:
             return self
+        elif is_literal(self) and is_literal(other):
+            if self == inf:
+                return inf
+            elif self == -inf:
+                return -inf
+            else:
+                return Add(other, self)
         elif isinstance(self, Add) and isinstance(other, Number):
             return Add(self.const + other, *self.terms)
         elif isinstance(self, Add):
@@ -321,25 +359,65 @@ class Expr:
         else:
             return Add(other, self)
 
+    @number_casted
     def __sub__(self, other: Union["Expr", Number]) -> Union["Expr", Number]:
-        if other == 0:
+        if self == undefined or other == undefined:
+            return undefined
+        elif other == 0:
             return self
+        elif is_literal(self) and is_literal(other):
+            if (self == inf and is_finite(other) or other == -inf and is_finite(self)
+                    or self == inf and other == -inf):
+                return inf
+            elif (self == -inf and is_finite(other) or other == inf and is_finite(self)
+                    or self == -inf and other == inf):
+                return -inf
+            elif self == inf and other == inf or other == -inf and self == -inf:
+                return undefined
+            else:
+                return Add(self, -other)
         elif isinstance(self, Add) and isinstance(other, Number):
             return Add(self.const - other, *self.terms)
         elif isinstance(self, Add):
-            return Add(Mul(-1, other), self.const, *self.terms)
+            return Add(-other, self.const, *self.terms)
         else:
-            return Add(self, Mul(-1, other))
+            return Add(self, -other)
 
+    @number_casted
     def __rsub__(self, other: Union["Expr", Number]) -> Union["Expr", Number]:
-        if other == 0:
-            return Mul(-1, self)
+        if self == Undefined:
+            return undefined
+        elif other == 0:
+            return -self
+        elif is_literal(self) and is_literal(other):
+            if self == -inf:
+                return inf
+            elif self == inf:
+                return -inf
+            else:
+                return Add(other, -self)
         else:
-            return Add(other, Mul(-1, self))
+            return Add(other, -self)
 
+    @number_casted
     def __mul__(self, other: Union["Expr", Number]) -> Union["Expr", Number]:
-        if other == 1:
+        if self == undefined or other == undefined:
+            return undefined
+        elif other == 1:
             return self
+        elif is_literal(self) and is_literal(other):
+            if is_infinite(self) and is_infinite(other):
+                return inf if self == other else -inf
+            elif is_infinite(self) and is_finite(other):
+                sign = get_sign(other)
+                return self if sign == 1 else undefined if sign == 0 else -self
+            elif is_infinite(other) and is_finite(self):
+                sign = get_sign(self)
+                return other if sign == 1 else undefined if sign == 0 else -other
+            elif other == 0:
+                return 0
+            else:
+                return Mul(self, other)
         elif isinstance(self, Mul) and isinstance(other, Number):
             return Mul(self.coef * other, *self.factors)
         elif isinstance(self, Mul) and isinstance(other, Mul):
@@ -351,9 +429,20 @@ class Expr:
         else:
             return Mul(self, other)
 
+    @number_casted
     def __rmul__(self, other: Union["Expr", Number]) -> Union["Expr", Number]:
-        if other == 1:
+        if self == undefined:
+            return undefined
+        elif other == 1:
             return self
+        elif is_literal(self) and is_literal(other):
+            if is_infinite(self):
+                sign = get_sign(other)
+                return self if sign == 1 else undefined if sign == 0 else -self
+            elif other == 0:
+                return 0
+            else:
+                return Mul(other, self)
         elif isinstance(self, Mul) and isinstance(other, Number):
             return Mul(self.coef * other, *self.factors)
         elif isinstance(self, Mul):
@@ -361,50 +450,121 @@ class Expr:
         else:
             return Mul(other, self)
 
+    @number_casted
     def __truediv__(self, other: Union["Expr", Number]) -> Union["Expr", Number]:
-        if other == 1:
-            return self
+        if self == undefined or other == undefined:
+            return undefined
+        elif is_literal(self) and is_literal(other):
+            if is_infinite(self) and is_infinite(other):
+                return undefined
+            elif is_infinite(self) and is_finite(other):
+                sign = get_sign(other)
+                return self if sign > 0 else undefined if sign == 0 else -self
+            elif is_finite(self) and is_infinite(other):
+                return 0
+            elif other == 1:
+                return self
+            elif other == 0:
+                return undefined
+            else:
+                return Mul(self, frdiv(1, other))
         elif isinstance(self, Mul) and isinstance(other, Number):
             return Mul(frdiv(self.coef, other), *self.factors)
         elif isinstance(self, Mul):
-            return Mul(self.coef, *self.factors, Pow(other, -1))
+            return Mul(self.coef, *self.factors, frdiv(1, other))
         else:
-            return Mul(self, Pow(other, -1))
+            return Mul(self, frdiv(1, other))
 
+    @number_casted
     def __rtruediv__(self, other: Union["Expr", Number]) -> Union["Expr", Number]:
-        if other == 1:
+        if self == undefined or other == undefined:
+            return undefined
+        elif is_literal(other) and is_literal(self):
+            if is_infinite(self):
+                return 0
+            elif other == 1:
+                return Pow(self, -1)
+            else:
+                return Mul(other, Pow(self, -1))
+        elif other == 1:
             return Pow(self, -1)
-        elif isinstance(other, Mul):
-            return Mul(other.coef, *other.factors, Pow(self, -1))
         else:
             return Mul(other, Pow(self, -1))
 
+    @number_casted
     def __pow__(self, other: Union["Expr", Number]) -> Union["Expr", Number]:
-        if other == 0:
-            # ! check for 0^0, defined as 1
-            return 1
-        elif other == 1:
-            return self
+        if self == undefined or other == undefined:
+            return undefined
+        elif is_literal(self) and is_literal(other):
+            if is_infinite(self) and is_infinite(other):
+                if self == inf and other == inf:
+                    return inf
+                elif self == inf and other == -inf:
+                    return 0
+                else:
+                    return undefined
+            elif is_infinite(self) and is_finite(other):
+                if self == inf and isinstance(other, int):
+                    return inf if other > 0 else undefined if other == 0 else 0
+                elif self == -inf and isinstance(other, int):
+                    return undefined if other == 0 else inf if other % 2 == 0 else -inf
+                else:
+                    return Pow(self, other)
+            elif is_finite(self) and is_infinite(other):
+                if self.value < 0:
+                    return undefined
+                elif other == inf:
+                    return inf if self.value > 1 else 1 if self.value == 1 else 0
+                else:
+                    return 0 if self.value > 1 else 1 if self.value == 1 else inf
+            elif other == 0:
+                return Pow(self, 0)
+            elif other == 1:
+                return self
+            else:
+                return Pow(self, other)
         elif isinstance(self, Pow):
             return Pow(self.base, self.expo * other)
         else:
             return Pow(self, other)
 
+    @number_casted
     def __rpow__(self, other: Union["Expr", Number]) -> Union["Expr", Number]:
-        # ! check for 0^0, defined as 1
-        if other == 0 or other == 1:
-            return other
+        if self == undefined or other == undefined:
+            return undefined
+        elif is_literal(other) and is_literal(self):
+            if is_infinite(self):
+                if isinstance(other, Constant):
+                    other = other.value
+                if other < 0:
+                    return undefined
+                elif other == 0:
+                    return 0 if self == inf else undefined
+                elif self == inf:
+                    return inf if other > 1 else 1 if other == 1 else 0
+                else:
+                    return 0 if other > 1 else 1 if other == 1 else inf
+            elif other == 1:
+                return 1
+            elif other == 0:
+                return 0 if get_sign(self) > 0 else undefined
+            else:
+                return Pow(other, self)
+        elif other == 0:
+            return Pow(0, self)
+        elif other == 1:
+            return self
         else:
             return Pow(other, self)
 
     def __neg__(self) -> Union["Expr", Number]:
-        return self * -1
+        return Mul(self, -1)
 
     def __pos__(self) -> Union["Expr", Number]:
         return self
 
     def __abs__(self) -> Union["Expr", Number]:
-        return Abs(self)
+        return undefined if self == undefined else Abs(self)
 
 
 ExprLike = Expr | Number
@@ -414,7 +574,9 @@ ExprLike = Expr | Number
 def frdiv(a: ExprLike, b: ExprLike, /) -> ExprLike:
     """Fraction-safe version for division."""
     if isinstance(a, int) and isinstance(b, int):
-        return Fraction(a, b)
+        return undefined if b == 0 else Fraction(a, b)
+    elif b == 0:
+        return undefined
     else:
         return a / b
 
@@ -422,7 +584,12 @@ def frdiv(a: ExprLike, b: ExprLike, /) -> ExprLike:
 @typechecked
 def frpow(a: ExprLike, b: ExprLike, /) -> ExprLike:
     """Fraction-safe version for power."""
-    if isinstance(a, int) and isinstance(b, int) and b < 0:
+    if a == 0:
+        if isinstance(b, Number):
+            return 0 if b > 0 else undefined
+        else:
+            return a ** b
+    elif isinstance(a, int) and isinstance(b, int) and b < 0:
         return Fraction(1, a ** -b)
     else:
         return a ** b
@@ -436,20 +603,10 @@ def float_hash(x: float, /) -> int:
 
 
 @typechecked
-def decimal_hash(d: Decimal):
-    """Convert Decimal to integer tuple hash."""
-    sign, digits, exp = d.as_tuple()
-    mantissa = 0
-    for x in digits:
-        mantissa = mantissa * 10 + x
-    return (1 - sign, mantissa, exp)
-
-
-@typechecked
 def exprhash(expr: ExprLike, /) -> tuple[int | tuple, ...]:
     """
     Hash tuple generator for expressions and numbers.
-    Only int/float/Fraction/Decimal are supported as non-Expr numbers.
+    Only int/float/Fraction are supported as non-Expr numbers.
     This is used for sorting and hashing expressions.
 
     :param expr: The expression or number to hash.
@@ -461,8 +618,6 @@ def exprhash(expr: ExprLike, /) -> tuple[int | tuple, ...]:
         return (KEY_INT, expr)
     elif isinstance(expr, Fraction):
         return (KEY_FRC, float(expr), expr.numerator)
-    elif isinstance(expr, Decimal):
-        return (KEY_DCM,) + decimal_hash(expr)
     elif isinstance(expr, float):
         return (KEY_FLT, float_hash(expr))
     elif isinstance(expr, Expr):
@@ -499,7 +654,7 @@ class Var(Expr):
         :param self: Instance to be initialized.
         :param name: The one-letter name from latin/greek alphabet.
                      Note that letters with existing constant
-                     defined cannot be used: e, pi, phi.
+                     defined cannot be used: e, pi, tau, phi.
         :type name: str
         """
         if len(name) != 1:
@@ -568,6 +723,14 @@ class Constant(Expr):
         :param value: The constant value for evaluation purposes.
         :type value: Number
         """
+        if value == 0:
+            # This is to avoid invalid results and simplifications in Expr operators
+            # since Constant.value is never checked to be 0.
+            raise ValueError("Constant cannot be of value 0")
+        elif not is_finite(value):
+            # Avoiding manual construction of inf/-inf/nan constants
+            raise ValueError("Constant cannot be of value inf/-inf/nan,"
+                             " use special constants instead.")
         self.name = name
         self.value = value
 
@@ -578,7 +741,7 @@ class Constant(Expr):
         return self.name
 
     def exprhash(self) -> CanonicalKey:
-        return (KEY_CNS, VARIABLE_LETTERS[::-1].index(self.name))
+        return (KEY_CNS, VARIABLE_LETTERS[::-1].index(self.name) + 3)
 
     def _evalf(self, value_map: ValueMap, /) -> ExprLike:
         return self.value
@@ -587,11 +750,200 @@ class Constant(Expr):
         return 0
 
 
+class Infinity(Constant):
+    name: str = "Infinity"
+
+    def __init__(self, /):
+        """
+        Initialize an infinity constant.
+        """
+        pass
+
+    def _evalf(self, value_map: dict["Var", Number] | None = None, /) -> ExprLike:
+        return math_inf
+
+    def exprhash(self) -> CanonicalKey:
+        return (KEY_CNS, CONSTKEY_INF)
+
+    def __neg__(self) -> ExprLike:
+        return NegativeInfinity()
+
+    def __pos__(self) -> ExprLike:
+        return self
+
+
+class NegativeInfinity(Constant):
+    name: str = "-Infinity"
+
+    def __init__(self, /):
+        """
+        Initialize a negative infinity constant.
+        """
+        pass
+
+    def _evalf(self, value_map: dict["Var", Number] | None = None, /) -> ExprLike:
+        return -math_inf
+
+    def exprhash(self) -> CanonicalKey:
+        return (KEY_CNS, CONSTKEY_NEGINF)
+
+    def __neg__(self) -> ExprLike:
+        return Infinity()
+
+    def __pos__(self) -> ExprLike:
+        return self
+
+
+class Undefined(Constant):
+    name: str = "Undefined"
+
+    def __init__(self, /):
+        """
+        Initialize an undefined constant.
+        """
+        pass
+
+    def _evalf(self, value_map: dict["Var", Number] | None = None, /) -> ExprLike:
+        return math_nan
+
+    def exprhash(self) -> CanonicalKey:
+        return (KEY_CNS, CONSTKEY_UNDEF)
+
+    def __neg__(self) -> ExprLike:
+        return self
+
+    def __pos__(self) -> ExprLike:
+        return self
+
+
 e = Constant('e', math_e)
 pi = π = Constant('π', math_pi)
+tau = τ = Constant('τ', math_tau)
 phi = φ = Constant('φ', (1 + sqrt(5)) / 2)
+inf = Infinity()
+undefined = Undefined()
 
 
+@number_casted
+def is_special_const(expr: ExprLike, /) -> bool:
+    """
+    Determine if the expression or number is inf, -inf, or undefined.
+
+    :param expr: The expression to check.
+    :type expr: ExprLike
+    :return: Whether if the expression is a special constant value.
+    :rtype: bool
+    """
+    return expr in (inf, -inf, undefined)
+
+
+@number_casted
+def is_literal(expr: ExprLike, /) -> bool:
+    """
+    Determine if the expression or number is a literal constant, i.e.,
+    a python number or a constant class. Does not count constant
+    structures like Add or Mul.
+
+    :param expr: The expression to check.
+    :type expr: ExprLike
+    :return: Whether if the expression is a direct constant value.
+    :rtype: bool
+    """
+    return isinstance(expr, Number | Constant)
+
+
+@number_casted
+def is_infinite(expr: ExprLike, /) -> bool:
+    """
+    Determine if the expression is inf or -inf.
+
+    :param expr: The expression to determine.
+    :type expr: ExprLike
+    :return: Whether if the expression is inf or -inf
+    :rtype: bool
+    """
+    return number_casted(expr) in (inf, -inf)
+
+
+@number_casted
+def is_finite(expr: ExprLike, /) -> bool:
+    """
+    Determine if the expression or number is a literal constant that's not
+    inf, -inf, or undefined.
+
+    :param expr: The expression to check.
+    :type expr: ExprLike
+    :return: Whether if the expression is a finite constant value.
+    :rtype: bool
+    """
+    return is_literal(expr) and not is_special_const(expr)
+
+
+@number_casted
+def get_sign(expr: ExprLike, /) -> int | None:
+    """
+    Determine the sign of the constant in terms of -1/0/1,
+    return None if undefined or isn't a number or constant.
+
+    :param expr: The literal to determine sign of.
+    :type expr: ExprLike
+    :return: The sign in -1/0/1 format or None.
+    :rtype: int | None
+    """
+    if is_literal(expr):
+        if expr == undefined:
+            return
+        elif expr == inf:
+            return 1
+        elif expr == -inf:
+            return 1
+        elif isinstance(expr, Constant):
+            return 1 if expr.value > 0 else 0 if expr.value == 0 else -1
+        else:
+            return 1 if expr > 0 else 0 if expr == 0 else -1
+    else:
+        return
+
+
+def cast_number(expr: ExprLike | Decimal, /) -> ExprLike:
+    """
+    Normalize an expression to replace python values of inf, -inf, and nan
+    to `Constant` expressions and `Decimal` to `Fraction`. Only replaces top
+    level value and does not search recursively.
+
+    :param expr: The expression to cast.
+    :type expr: ExprLike
+    :return: The expression replaced by constants.
+    :rtype: ExprLike
+    """
+    if isinstance(expr, float):
+        if math_isinf(expr):
+            return inf if expr > 0 else -inf
+        elif math_isnan(expr):
+            return undefined
+        else:
+            return expr
+    elif isinstance(expr, Decimal):
+        return Fraction(expr)
+    else:
+        return expr
+
+
+def cast_map(subs: ExprMap, /) -> ExprMap:
+    """
+    Normalize substitution map with `cast_number` to replace special constants
+    with `Constant` expressions and `Decimal` to `Fraction`. Only replaces top
+    level value and does not search recursively.
+
+    :param subs: The substitution map to normalize
+    :type subs: ExprMap
+    :return: The normalized substitution map.
+    :rtype: ExprMap
+    """
+    return {var: cast_number(expr) for var, expr in subs.items()}
+
+
+@number_casted
 def format_term(term: ExprLike, /) -> tuple[bool, str]:
     """Format term for Add instance printing."""
     if isinstance(term, Mul):
@@ -604,9 +956,10 @@ def format_term(term: ExprLike, /) -> tuple[bool, str]:
 
 @inherit_docstrings
 class Add(Expr):
-    terms: list[Expr]
+    terms: list[ExprLike]
     const: Number = 0
 
+    @number_casted
     def __init__(self, *terms: list[ExprLike]):
         """
         Initialize an addition instance with given terms.
@@ -663,6 +1016,7 @@ class Add(Expr):
         return sum(_diff(term, var) for term in self.terms)
 
 
+@number_casted
 def format_factor(term: ExprLike, /) -> tuple[bool, str]:
     """Format factor for Mul instance printing."""
     if isinstance(term, Pow):
@@ -683,9 +1037,10 @@ def format_factor(term: ExprLike, /) -> tuple[bool, str]:
 
 @inherit_docstrings
 class Mul(Expr):
-    factors: list[Expr]
+    factors: list[ExprLike]
     coef: Number = 1
 
+    @number_casted
     def __init__(self, *factors: list[ExprLike]):
         """
         Initialize a multiplication instance with given factors.
@@ -748,7 +1103,7 @@ class Mul(Expr):
                              for factor in self.factors), *args,
         )
 
-    def _expand_mul(self) -> Union["Expr", Number]:
+    def _expand_mul(self) -> ExprLike:
         return sum(prod(group) for group in iterprod(
             [self.coef],
             *([factor.const] + factor.terms if isinstance(factor, Add)
@@ -768,6 +1123,7 @@ class Pow(Expr):
     base: ExprLike
     expo: ExprLike
 
+    @number_casted
     def __init__(self, base: ExprLike, expo: ExprLike, /):
         """
         Initialize a power instance with given base and exponent.
@@ -814,7 +1170,7 @@ class Pow(Expr):
                   apply(self.expo, func, *args)), *args,
         )
 
-    def _expand_dist(self) -> Union["Expr", Number]:
+    def _expand_dist(self) -> ExprLike:
         if not isinstance(self.base, Add):
             return self
         elif not isinstance(self.expo, Number):
@@ -829,7 +1185,7 @@ class Pow(Expr):
             *([all_terms] * expo)
         ))
 
-    def _expand_pow(self) -> Union["Expr", Number]:
+    def _expand_pow(self) -> ExprLike:
         if isinstance(self.base, Mul):
             base_objs = [self.base.coef] + self.base.factors
         else:
@@ -859,6 +1215,7 @@ class UnaryFunction(Function):
     name: str
     arg: ExprLike
 
+    @number_casted
     def __init__(self, arg: ExprLike, /):
         """
         Initialize a unary function instance with given argument.
@@ -907,6 +1264,7 @@ class BinaryFunction(Function):
     arg1: ExprLike
     arg2: ExprLike
 
+    @number_casted
     def __init__(self, arg1: ExprLike, arg2: ExprLike, /):
         """
         Initialize a binary function instance with given arguments.
@@ -987,7 +1345,7 @@ class Tan(UnaryFunction):
     name = "Tan"
     func_key = FUNC_TAN
 
-    def _expand_trig(self) -> Union["Expr", Number]:
+    def _expand_trig(self) -> ExprLike:
         return Sin(self.arg) / Cos(self.arg)
 
     def _evalf(self, value_map: ValueMap, /) -> ExprLike:
@@ -1003,7 +1361,7 @@ class Sec(UnaryFunction):
     name = "Sec"
     func_key = FUNC_SEC
 
-    def _expand_trig(self) -> Union["Expr", Number]:
+    def _expand_trig(self) -> ExprLike:
         return 1 / Cos(self.arg)
 
     def _evalf(self, value_map: ValueMap, /) -> ExprLike:
@@ -1019,7 +1377,7 @@ class Csc(UnaryFunction):
     name = "Csc"
     func_key = FUNC_CSC
 
-    def _expand_trig(self) -> Union["Expr", Number]:
+    def _expand_trig(self) -> ExprLike:
         return 1 / Sin(self.arg)
 
     def _evalf(self, value_map: ValueMap, /) -> ExprLike:
@@ -1035,7 +1393,7 @@ class Cot(UnaryFunction):
     name = "Cot"
     func_key = FUNC_COT
 
-    def _expand_trig(self) -> Union["Expr", Number]:
+    def _expand_trig(self) -> ExprLike:
         return Cos(self.arg) / Sin(self.arg)
 
     def _evalf(self, value_map: ValueMap, /) -> ExprLike:
@@ -1129,7 +1487,7 @@ class Ln(UnaryFunction):
     name = "Ln"
     func_key = FUNC_LN
 
-    def _expand_log(self) -> Union["Expr", Number]:
+    def _expand_log(self) -> ExprLike:
         if isinstance(self.arg, Mul):
             return sum(
                 ([] if self.arg.coef == 1 else [Ln(self.arg.coef)]) +
@@ -1153,7 +1511,7 @@ class Log(BinaryFunction):
     name = "Log"
     func_key = FUNC_LOG
 
-    def _expand_log(self) -> Union["Expr", Number]:
+    def _expand_log(self) -> ExprLike:
         if isinstance(self.arg1, Mul):
             return sum(
                 ([] if self.arg1.coef == 1 else [Log(self.arg1.coef, self.arg2)]) +
@@ -1184,6 +1542,7 @@ class Limit(Expr):
     point: ExprLike
     direction: int = 0
 
+    @number_casted
     def __init__(self, expr: ExprLike, var: Var,
                  point: ExprLike, direction: int = 0, /):
         """
@@ -1243,6 +1602,7 @@ class Derivative(Expr):
     var: Var
     order: int = 1
 
+    @number_casted
     def __init__(self, expr: ExprLike, var: Var,
                  order: int = 1, /):
         """
@@ -1307,11 +1667,12 @@ class Derivative(Expr):
 class Integral(Expr):
     expr: ExprLike
     var: Var
-    a: ExprLike | None = None  # lower bound
-    b: ExprLike | None = None  # upper bound
+    lower: ExprLike | None = None
+    upper: ExprLike | None = None
 
+    @number_casted
     def __init__(self, expr: ExprLike, var: Var,
-                 a: ExprLike | None = None, b: ExprLike | None = None, /):
+                 lower: ExprLike | None = None, upper: ExprLike | None = None, /):
         """
         Initialize an integral instance with given expression, variable,
         and optional bounds (default to be both None). Bounds must either
@@ -1323,40 +1684,41 @@ class Integral(Expr):
         :type expr: ExprLike
         :param var: The variable to take the integral with.
         :type var: Var
-        :param a: Optional lower bound.
-        :type a: ExprLike | None
-        :param b: Optional upper bound.
-        :type b: ExprLike | None
+        :param lower: Optional lower bound.
+        :type lower: ExprLike | None
+        :param upper: Optional upper bound.
+        :type upper: ExprLike | None
         """
         self.expr = expr
         self.var = var
-        if (a is None) != (b is None):
+        if (lower is None) != (upper is None):
             raise ValueError("Integrals must either have both"
                              " bounds defined or both undefined")
-        self.a = a
-        self.b = b
+        self.lower = lower
+        self.upper = upper
 
     def __str__(self):
-        bound_str = '' if self.a is None else f"[{self.a}, {self.b}]"
+        bound_str = '' if self.lower is None else f"[{self.lower}, {self.upper}]"
         return f"∫{bound_str} {self.expr} d{self.var}"
 
     def __repr__(self):
-        bound_str = '' if self.a is None else f"[{self.a!r}, {self.b!r}]"
+        bound_str = '' if self.lower is None else f"[{self.lower!r}, {self.upper!r}]"
         return f"∫{bound_str} {self.expr!r} d{self.var}"
 
     def exprhash(self) -> CanonicalKey:
-        if self.a is None:
+        if self.lower is None:
             return (KEY_INT, exprhash(self.expr), exprhash(self.var))
         else:
             return (KEY_INT, exprhash(self.expr), exprhash(self.var),
-                    exprhash(self.a), exprhash(self.b))
+                    exprhash(self.lower), exprhash(self.upper))
 
     def apply(self, func: FunctionType, *args) -> any:
         return func(
             Integral(apply(self.expr, func, *args),
                      apply(self.var, func, *args),
-                     None if self.a is None else apply(self.a, func, *args),
-                     None if self.b is None else apply(self.b, func, *args)), *args,
+                     None if self.lower is None else apply(
+                         self.lower, func, *args),
+                     None if self.upper is None else apply(self.upper, func, *args)), *args,
         )
 
     def indef_doit(self) -> ExprLike | None:
@@ -1377,13 +1739,13 @@ class Integral(Expr):
         indef_result = self.indef_doit()
         if indef_result is None:
             return self
-        elif self.a is None:
+        elif self.lower is None:
             return indef_result
         else:
-            return indef_result.subs({self.var: self.b}) - indef_result.subs({self.var: self.a})
+            return indef_result.subs({self.var: self.upper}) - indef_result.subs({self.var: self.lower})
 
     def _diff(self, var: Var, /) -> ExprLike:
-        if self.var == var and self.a is None and self.b is None:
+        if self.var == var and self.lower is None and self.upper is None:
             return self.expr
         else:
             result = doit(self)
@@ -1427,7 +1789,7 @@ def is_constant(expr: ExprLike, var: Var | None = None, /) -> bool:
         return is_constant(expr.expr, var) and is_constant(expr.var, var)
     elif isinstance(expr, Integral):
         return (is_constant(expr.expr, var) and is_constant(expr.var, var)
-                and is_constant(expr.a, var) and is_constant(expr.b, var))
+                and is_constant(expr.lower, var) and is_constant(expr.upper, var))
     else:
         return False
 
@@ -1469,7 +1831,7 @@ def is_rat_constant(expr: ExprLike, var: Var | None = None, /) -> bool:
         return is_rat_constant(expr.expr, var) and is_rat_constant(expr.var, var)
     elif isinstance(expr, Integral):
         return (is_rat_constant(expr.expr, var) and is_rat_constant(expr.var, var)
-                and is_rat_constant(expr.a, var) and is_rat_constant(expr.b, var))
+                and is_rat_constant(expr.lower, var) and is_rat_constant(expr.upper, var))
     else:
         return False
 
@@ -1883,16 +2245,33 @@ def diff(expr: ExprLike, var: Var, /, order: int = 1, *, evaluate=True) -> ExprL
 
 @typechecked
 def integrate(expr: ExprLike, var: Var,
-              a: ExprLike | None = None, b: ExprLike | None = None, /):
-    return Integral(expr, var, a, b).doit()
+              lower: ExprLike | None = None, upper: ExprLike | None = None, /):
+    return Integral(expr, var, lower, upper).doit()
 
 
 def main():
     x, y, z = symbols("xyz")
-    expr = (x * y * 2) ** 2
-    print(expr)
-    print(integrate(expr, x))
-    print(integrate(expr, x, 1, 2))
+    print(inf + 1)  # Infinity
+    print(-inf + 1)  # -Infinity
+    print(inf * 0)  # Undefined
+    print(inf - inf)  # Undefined
+    print(inf + inf)  # Infinity
+    print(-inf - inf)  # -Infinity
+    print(inf * 3)  # Infinity
+    print(-inf * 3)  # -Infinity
+    print(-7 * -inf)  # Infinity
+    print(-inf * 5)  # -Infinity
+    print(inf / inf)  # Undefined
+    print(inf / 4)  # Infinity
+    print(inf / -2)  # -Infinity
+    print(-inf / -3)  # Infinity
+    print(-inf / 7)  # -Infinity
+    print((-inf) ** 2)  # Infinity
+    print(0 ** inf)  # 0
+    print(0 ** -inf)  # Undefined
+    print((x ** 2).subs({x: 0}))  # 0
+    print(x ** 0).subs({x: 0})  # Undefined
+    print(x ** -3).subs({x: 0})  # Undefined
 
 
 if __name__ == "__main__":

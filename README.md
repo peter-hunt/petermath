@@ -12,9 +12,9 @@ If used in a folder, put `.` in front of the relative imports, e.g. `utils.py`, 
 
 - `expr.py`: Python computer algebra system (CAS) for mathematical expressions;
 - `xxx_test.py`: Relevant test code for each module and for example usage;
-- `set_theory.py`: (Work In Progress) Set theory logic for number domains, set operations, solution sets and so on;
-- `statement.py`: (Work In Progress) Types for equations, inequalities, diffeq, etc.;
-- `solve.py`: (Work In Progress) Solvers for equations, inequalities, diffeq, etc..
+- `set_theory.py`: (Work in Progress) Set theory logic for number domains, set operations, solution sets and so on;
+- `statement.py`: (Work in Progress) Types for equations, inequalities, diffeq, etc.;
+- `solve.py`: (Work in Progress) Solvers for equations, inequalities, diffeq, etc..
 - `utils.py`: Common code for all other usages;
 
 ## Computer Algebra System
@@ -28,7 +28,9 @@ Here are the current structures and functionalities supported or planned:
 - Expr class to have all other CAS classes as subclasses;
 - Number literals. Complex numbers are supported but not much suggested;
 - Single-letter `Var`. See designer notes below for more information;
-- Mathematical `Constant`s, like `pi` and `e`, both available kept as themselves and evaluation for opened options and usage;
+- Mathematical `Constant`s:
+  - Regular constants like `pi` and `e`, both available kept as themselves and evaluation for opened options and usage;
+  - Special constants like `inf`, `-inf`, and `undefined` for intervals, invalid operations, and so on. (Work in Progress)
 - `Add`, `Mul`, and `Pow` nodes, where subtraction and division are represented with those only but printed properly. See designer notes below for more information;
 - `Function` structures for one and two variable functions, where currently implemented are abs, trigs, arctrigs, ln/log.
 - `Limit`, `Derivative`, and `Integral` structures, although mostly not yet functional.
@@ -36,6 +38,8 @@ Here are the current structures and functionalities supported or planned:
 ### Current Functionalities
 
 - Constructing corresponding classes when python operation are used on Expr subclass, done with operator methods;
+- Supporting Fraction interactions but not Decimal. See designer notes below for more information;
+- Automatically casting python values for `inf`, `-inf`, and `nan` to functional corresponding `Constant` values;
 - Template for recursive functionality implementation, implementation/structure-planning on following functions:
 - - `doit(expr)`: Evaluating evaluatable limit/derivative/integral structures and plugging in values for known constant radiants in trigs (this part not implemented yet);
 - - `subs(expr, expr_map)`: Applying substitution without modifying the corresponding values or the result expression;
@@ -47,10 +51,10 @@ Here are the current structures and functionalities supported or planned:
 ### Planned Structures
 
 - An implementation of set theory to support and organize statements and solutions in a much more systematic manner;
-- `Statement` class with equations and inequalities:
-  - Equality and solving equations;
+- `Statement` class with equality and inequalities:
+  - Equality, not to be confused with Equation.See designer notes below for more information ;
   - Inequality structures. See designer notes below for more information.
-- `Set` class with `Interval`, `FiniteSet`, `Union`, `Integer`, `Rational`, `Real`, and `Complex`;
+- `Set` class with `Interval`, `FiniteSet`, `Union`, `NaturalSet` to `ComplexSet`;
   - And the `SetBuilder` with separate code since it requires the `Statement` class, which requires `Set` class for the number domains.
 - Contraints like domain sets and intervals to feed into statements;
 - Functions: factorial, ceil, floor, sgn, modulo, exp (construction only).
@@ -59,9 +63,7 @@ Here are the current structures and functionalities supported or planned:
 
 ### Planned Functionalities
 
-- Expand `exprhash` to be `mathhash` instead;
-- Organize the `expr.Constant` under `Expr` to be in `constants.py` instead to work with other constants and make `ExprLike` include those constants;
-- Supporting Fraction/Decimal interactions and support better. See designer notes below for more information;
+- Expand `exprhash` to be eventually `mathhash` with each level added: `Statement` and `Set`;
 - Set theory as a class and supporting set theory concepts;
 - Solving equations and inequalities;
 - Limit and integral evaluation with function to construct or evaluate;
@@ -80,11 +82,12 @@ Here are the current structures and functionalities supported or planned:
 
 - For the variable names, an option is to allow especially subscripts to support variable names and literals like A_1 for more variable spaces, but that will make the command line printing more complicated and not support compact multiplication like writing `abc` in place of `a * b * c` as easily. And especially as an experimental/educational project, this will only support single letter variables from latin and greek letters that are not mathematically used yet for now;
 - For the sake of avoiding confusion and reserving the use of python comparison operators, and since python also doesn't have an internal `===` operation other than `is` (which doesn't really work with artificially immutable instances), builtin operations like `==` and `>` will be reserved to compare exprhash values for ordering (which will not call on methods like `simplify()`) instead of creating (in)equality instances;
-- More to inequalities, this will be implemented later with domains, like the integer, rational, real, and complex sets, and constraints, like `x` being positive or negative, that would simplify the process of solving equations and allow solving or simplifying inequalities.
+- As a statement, the equal sign structure will be called `Equality` instead of `Equation` as it serves more as a equality comparison for the set theory logic instead of a solvable construction, which will be implemented later with different solving algorithms and the basics of set theory implemented to be able to have solution sets;
+- More on inequalities, this will be implemented later with domains, like the integer, rational, real, and complex sets, and constraints, like `x` being positive or negative, that would simplify the process of solving equations and allow solving or simplifying inequalities.
 - Although I haven't found an instance that leads to this, the currently planned logic for `expand()` with applying all the basic expansion functions might lead to different results for different expanding order, which could be avoided by changing the order or ensuring that the expansion logic won't lead to separate local results; the same applies for other methods that might return unexpectedly different results. Just for future reference;
 - With the current `evalf()` implementation, the value map allows missing variables or even with empty value. This is by design since this would potentially allow faster evaluation specified on the variable(s) left out, and it will also support the passing of some partial value map that isn't related to this specific expression;
 - For the factoring functionality, I would love to try to design and implement a general usage one that works for all polynomials and so on. However, with computers not being able to recognize general patterns in a humane way, factoring looks more like solving for the roots and writing it as the solution form. Therefore, the planned implementation is to use quadratic up to quartic formulas, simplified after plugging in, from the original polynomial or arithmetic series of powers with up to four terms, to arrive to the factoring of polynomials. Note that this would require a lot of progress in `simplify` and more to work for even simpler polynomials to return sane expressions, but this approach will ensure a rather more compatible factoring formula, even at the cost of not recognizing patterns like `x^n-1` always factorable by `x-1` (which is still implementable as exceptions but the logic wouldn't be learned);
-- Both python builtin library types for Fraction and Decimal are supported, but the interactions within them are will still lead to TypeErrors as python doesn't support them by default. This could be overcome later by overriding all the operations or implementing custom fraction/decimal types to allow them and work with the Expr instances better.
+- Python builtin library types for only Fraction and not Decimal is supported, because the interactions within them are will still lead to TypeErrors as python doesn't support them by default. This is overcome by casting decimal instances to fractions automatically, the same process where the python values for infinities and NaNs are casted to expr constants.
 
 # License: MIT
 
